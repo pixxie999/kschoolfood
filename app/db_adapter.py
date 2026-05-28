@@ -109,15 +109,7 @@ class D1Adapter:
         return True
 
 
-def get_db_adapter(request=None) -> Union[D1Adapter, LocalSQLiteAdapter]:
-    """
-    요청 객체(FastAPI Request)에서 Cloudflare bindings가 있는지 확인하여
-    상황에 맞는 DB 어댑터를 반환합니다.
-    """
-    if request:
-        env = request.scope.get("env")
-        if env and hasattr(env, "DB"):
-            return D1Adapter(env.DB)
-    
-    # request가 없거나 env.DB 바인딩이 없으면 로컬 SQLite로 대체
+def get_db_adapter(env=None) -> Union[D1Adapter, LocalSQLiteAdapter]:
+    if env and hasattr(env, "DB"):
+        return D1Adapter(env.DB)
     return LocalSQLiteAdapter()
