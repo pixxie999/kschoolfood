@@ -1,0 +1,4 @@
+[[d1_databases]]
+binding = "kschoolfood_db"
+database_name = "kschoolfood-db"
+database_id = "0902c504-c3be-4596-9991-10940be73c05"

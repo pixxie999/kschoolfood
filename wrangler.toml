@@ -1,0 +1,18 @@
+name = "kschoolfood"
+main = "main.py"
+compatibility_date = "2024-05-02"
+compatibility_flags = [ "python_workers" ]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "kschoolfood-db"
+database_id = "0902c504-c3be-4596-9991-10940be73c05"
+
+[vars]
+OFFICE_CODE = "K10"
+SCHOOL_CODE = "7801106"
+ACTIVE_LLM_PROVIDER = "gemini"
+AMAZON_TAG = "your_amazon_tag_here"
+IHERB_CODE = "your_iherb_code_here"
+# API KEY 같은 민감한 비밀 정보는 배포 시에는 'wrangler secret put'으로, 
+# 로컬 개발 시에는 '.dev.vars' 파일을 통해 관리합니다.

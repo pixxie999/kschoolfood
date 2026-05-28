@@ -1,0 +1,21 @@
+[project]
+name = "kschoolfood"
+version = "0.1.0"
+description = "Global K-School Food WebApp using Cloudflare Workers & D1"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "jinja2",
+    "httpx",
+    "google-generativeai",
+    "openai",
+    "python-dotenv",
+    "pydantic"
+]
+
+[dependency-groups]
+dev = [
+    "workers-py",
+    "workers-runtime-sdk"
+]

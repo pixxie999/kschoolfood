@@ -1,0 +1,13 @@
+.venv/
+.venv
+__pycache__/
+*.pyc
+.git/
+.wrangler/
+kschoolfood.db
+UASOFT/
+.dev.vars
+requirements.txt
+pyproject.toml
+app/requirements.txt
+app/pyproject.toml

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}K-School Food - Authentic & Healthy Recipes{% endblock %}</title>
+    <meta name="description" content="{% block meta_desc %}Discover the authentic and healthy Korean school lunch recipes and find local substitute ingredients easily.{% endblock %}">
+    
+    <!-- OpenGraph Tags for Social Networks (Pinterest/Instagram) -->
+    <meta property="og:title" content="{% block og_title %}K-School Food - Healthy School Lunch Recipes{% endblock %}">
+    <meta property="og:description" content="{% block og_desc %}Explore daily Korean school lunch menu translated with local substitutes and shopping links.{% endblock %}">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="https://images.unsplash.com/photo-1541832676-9b763b0239ab?q=80&w=600">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        outfit: ['Outfit', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#fff7ed',
+                            100: '#ffedd5',
+                            500: '#f97316', // Orange Accent
+                            600: '#ea580c',
+                            900: '#7c2d12',
+                        },
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Micro-animations & Smooth Transitions -->
+    <style>
+        .hover-lift {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .hover-lift:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+    {% block head_extra %}{% endblock %}
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen flex flex-col">
+
+    <!-- Header Gradient bar -->
+    <header class="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+            <a href="/" class="flex items-center space-x-2">
+                <span class="text-2xl">🍱</span>
+                <span class="font-outfit font-extrabold text-xl tracking-tight bg-gradient-to-r from-orange-600 to-amber-500 bg-clip-text text-transparent">
+                    K-SCHOOL FOOD
+                </span>
+            </a>
+            <nav class="flex items-center space-x-4">
+                <a href="/" class="text-sm font-semibold text-gray-600 hover:text-orange-500 transition-colors">Daily Tray</a>
+                <span class="text-gray-300">|</span>
+                <span class="text-xs bg-amber-100 text-amber-800 font-bold px-2.5 py-0.5 rounded-full">Global</span>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-4xl w-full mx-auto px-4 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-100 py-8 mt-12 text-center text-xs text-gray-500">
+        <div class="max-w-4xl mx-auto px-4 space-y-3">
+            <p class="font-semibold text-gray-600">🍱 K-School Food WebApp</p>
+            <p>Providing translated recipes, nutritional breakdown, and local ingredient substitutes for global fans.</p>
+            <div class="max-w-xl mx-auto border-t border-gray-100 pt-3 text-[10px] text-gray-400">
+                Disclaimer: As an Amazon Associate and iHerb Rewards member, this site earns from qualifying purchases. 
+                Product details and availability on affiliate stores are subject to change.
+            </div>
+            <p class="pt-2 text-gray-400">&copy; 2026 K-School Food. All rights reserved.</p>
+        </div>
+    </footer>
+
+</body>
+</html>

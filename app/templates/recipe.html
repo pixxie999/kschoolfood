@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}{{ recipe.english_name }} Recipe - K-School Food{% endblock %}
+{% block meta_desc %}{{ recipe.seo_description }}{% endblock %}
+
+{% block og_title %}{{ recipe.english_name }} Recipe | Korean School Meal Localization{% endblock %}
+{% block og_desc %}{{ recipe.seo_description }}{% endblock %}
+
+{% block head_extra %}
+<!-- Dynamic LD+JSON Recipe Structured Data -->
+<script type="application/ld+json">
+{{ ld_json | safe }}
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-8 animate-fade-in">
+
+    <!-- Recipe Title Header -->
+    <div class="bg-white border border-gray-100 rounded-2xl p-6 md:p-8 shadow-sm">
+        <a href="/" class="text-xs font-bold text-orange-500 hover:underline uppercase tracking-wider flex items-center space-x-1">
+            <span>&larr;</span> <span>Back to daily tray</span>
+        </a>
+        <h1 class="text-3xl md:text-4xl font-outfit font-extrabold text-gray-900 mt-3">
+            {{ recipe.english_name }}
+        </h1>
+        <p class="text-sm text-gray-500 mt-1">
+            Original Korean Name: <span class="font-semibold text-gray-700">{{ recipe.korean_name }}</span>
+        </p>
+        <p class="text-base text-gray-600 mt-4 leading-relaxed italic border-l-4 border-orange-200 pl-4">
+            "{{ recipe.seo_description }}"
+        </p>
+    </div>
+
+    <!-- Main Grid: Ingredients & Substitutes (Left) and Instructions (Right) -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        
+        <!-- Left Side: Ingredients & Substitutes -->
+        <div class="md:col-span-1 space-y-8">
+            <!-- Nutrition Card -->
+            <div class="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+                <h3 class="font-outfit font-bold text-lg text-gray-900 mb-4">Estimated Nutrition</h3>
+                <div class="grid grid-cols-2 gap-4 text-center">
+                    <div class="bg-orange-50 p-3 rounded-xl">
+                        <span class="text-[10px] font-bold text-orange-600 block uppercase">Calories</span>
+                        <span class="text-base font-extrabold text-orange-800">{{ nutrition.get('calories', 'N/A') }}</span>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded-xl">
+                        <span class="text-[10px] font-bold text-slate-500 block uppercase">Carbs</span>
+                        <span class="text-base font-extrabold text-slate-800">{{ nutrition.get('carbs', 'N/A') }}</span>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded-xl">
+                        <span class="text-[10px] font-bold text-slate-500 block uppercase">Protein</span>
+                        <span class="text-base font-extrabold text-slate-800">{{ nutrition.get('protein', 'N/A') }}</span>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded-xl">
+                        <span class="text-[10px] font-bold text-slate-500 block uppercase">Fat</span>
+                        <span class="text-base font-extrabold text-slate-800">{{ nutrition.get('fat', 'N/A') }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ingredients Card -->
+            <div class="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+                <h3 class="font-outfit font-bold text-lg text-gray-900 mb-4">Ingredients</h3>
+                <ul class="divide-y divide-gray-100">
+                    {% for item in ingredients %}
+                    <li class="py-3 flex items-start justify-between space-x-2">
+                        <div>
+                            <p class="text-sm font-semibold text-gray-800">{{ item.name }}</p>
+                            <p class="text-xs text-gray-500">{{ item.amount }}</p>
+                        </div>
+                        {% if item.affiliate_url %}
+                        <a href="{{ item.affiliate_url }}" target="_blank" rel="noopener noreferrer" class="text-[10px] bg-orange-100 hover:bg-orange-200 text-orange-700 font-extrabold px-2.5 py-1 rounded-lg transition-colors flex items-center space-x-1 shrink-0 mt-0.5">
+                            <span>Get on {{ item.platform | capitalize }}</span>
+                            <span>🛒</span>
+                        </a>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <!-- Local Substitute Tips Card -->
+            {% if substitutes %}
+            <div class="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100 rounded-2xl p-6 shadow-sm space-y-4">
+                <div class="flex items-center space-x-2">
+                    <span class="text-xl">💡</span>
+                    <h3 class="font-outfit font-bold text-lg text-amber-900">Local Substitutes</h3>
+                </div>
+                <div class="space-y-4">
+                    {% for sub in substitutes %}
+                    <div class="text-xs bg-white border border-amber-100/50 rounded-xl p-3 space-y-1">
+                        <p class="font-bold text-gray-800">
+                            Instead of <span class="text-orange-600">{{ sub.original }}</span>
+                        </p>
+                        <p class="font-semibold text-amber-800">
+                            Use: {{ sub.substitute }}
+                        </p>
+                        <p class="text-[11px] text-gray-500 leading-relaxed pt-1">
+                            Reason: {{ sub.reason }}
+                        </p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Right Side: Instructions -->
+        <div class="md:col-span-2 space-y-8">
+            <div class="bg-white border border-gray-100 rounded-2xl p-6 md:p-8 shadow-sm">
+                <h3 class="font-outfit font-bold text-xl text-gray-900 mb-6 flex items-center space-x-2">
+                    <span class="text-orange-500">🧑‍🍳</span>
+                    <span>Cooking Instructions</span>
+                </h3>
+                <ol class="space-y-6">
+                    {% for step in instructions %}
+                    <li class="flex items-start space-x-4">
+                        <span class="flex items-center justify-center bg-orange-100 text-orange-700 font-extrabold text-sm w-7 h-7 rounded-full shrink-0 mt-0.5">
+                            {{ loop.index }}
+                        </span>
+                        <p class="text-sm md:text-base text-gray-700 leading-relaxed pt-0.5">
+                            {{ step }}
+                        </p>
+                    </li>
+                    {% endfor %}
+                </ol>
+            </div>
+
+            <!-- Monetization Banner - School Tray Purchase Promotion (Repeat on Detail Page) -->
+            <div class="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-100 rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0 sm:space-x-6">
+                <div>
+                    <h3 class="text-base font-outfit font-bold text-gray-900">Serve in a Korean School Tray</h3>
+                    <p class="text-xs text-gray-600 mt-0.5">Stainless steel compartment trays keep your meals fresh and authentic.</p>
+                </div>
+                <a href="{{ tray_affiliate_url }}" target="_blank" rel="noopener noreferrer" class="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all shadow-md shrink-0">
+                    Get 5-Compartment Tray 🛒
+                </a>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}K-School Food - Today's Meal Tray{% endblock %}
+
+{% block content %}
+<div class="space-y-8 animate-fade-in">
+
+    <!-- Date Navigation Header -->
+    <div class="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
+        <div>
+            <span class="text-xs font-bold text-orange-500 uppercase tracking-widest">Korea School Meal Tracker</span>
+            <h1 class="text-2xl md:text-3xl font-outfit font-extrabold text-gray-900 mt-1">
+                {{ formatted_date }}
+            </h1>
+        </div>
+        <div class="flex items-center space-x-2">
+            <a href="/?date={{ prev_date }}" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-xl transition-colors">
+                &larr; Prev Day
+            </a>
+            <a href="/?date={{ next_date }}" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-xl transition-colors">
+                Next Day &rarr;
+            </a>
+        </div>
+    </div>
+
+    <!-- 5-Compartment Meal Tray View -->
+    <div class="bg-gradient-to-br from-slate-200 to-slate-300 border-4 border-slate-400 rounded-3xl p-6 md:p-8 shadow-xl max-w-3xl mx-auto">
+        <h2 class="text-center font-outfit font-bold text-slate-700 tracking-wider uppercase mb-6 text-sm">
+            Interactive Meal Tray (Click dish to view recipe)
+        </h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <!-- 3 Side Dishes on the TOP (For Desktop) -->
+            {% for dish in dishes[2:] %}
+            <div class="md:col-span-2">
+                {% if dish.has_recipe %}
+                <a href="/recipe/{{ dish.recipe_id }}" class="block bg-slate-100 hover:bg-white text-slate-900 border-2 border-slate-300 rounded-2xl p-4 h-36 flex flex-col justify-between shadow-inner hover-lift cursor-pointer transition-all">
+                    <div>
+                        <span class="text-[10px] font-bold text-orange-600 uppercase">{{ dish.role }}</span>
+                        <h3 class="font-outfit font-bold text-base line-clamp-2 mt-1">{{ dish.english_name }}</h3>
+                        <p class="text-xs text-gray-500 line-clamp-1 mt-0.5">{{ dish.korean_name }}</p>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] bg-orange-100 text-orange-800 font-bold px-2 py-0.5 rounded-full">View Recipe &rarr;</span>
+                    </div>
+                </a>
+                {% else %}
+                <div class="bg-slate-100 border-2 border-slate-300 rounded-2xl p-4 h-36 flex flex-col justify-between shadow-inner opacity-75">
+                    <div>
+                        <span class="text-[10px] font-bold text-slate-500 uppercase">{{ dish.role }}</span>
+                        <h3 class="font-outfit font-semibold text-slate-600 text-base line-clamp-2 mt-1">{{ dish.english_name }}</h3>
+                        <p class="text-xs text-slate-400 line-clamp-1 mt-0.5">{{ dish.korean_name }}</p>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[9px] bg-slate-200 text-slate-500 font-medium px-2 py-0.5 rounded-full">No Recipe</span>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            <!-- Bottom Row: Rice (3 cols) and Soup (3 cols) -->
+            <!-- Main Rice Compartment -->
+            <div class="md:col-span-3">
+                {% if dishes[0].has_recipe %}
+                <a href="/recipe/{{ dishes[0].recipe_id }}" class="block bg-slate-100 hover:bg-white text-slate-900 border-2 border-slate-300 rounded-2xl p-6 h-48 flex flex-col justify-between shadow-inner hover-lift cursor-pointer transition-all">
+                    <div>
+                        <span class="text-xs font-bold text-orange-600 uppercase">{{ dishes[0].role }}</span>
+                        <h3 class="font-outfit font-extrabold text-lg mt-2">{{ dishes[0].english_name }}</h3>
+                        <p class="text-sm text-gray-500 mt-1">{{ dishes[0].korean_name }}</p>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[11px] bg-orange-100 text-orange-800 font-bold px-3 py-1 rounded-full">View Recipe &rarr;</span>
+                    </div>
+                </a>
+                {% else %}
+                <div class="bg-slate-100 border-2 border-slate-300 rounded-2xl p-6 h-48 flex flex-col justify-between shadow-inner opacity-80">
+                    <div>
+                        <span class="text-xs font-bold text-slate-500 uppercase">{{ dishes[0].role }}</span>
+                        <h3 class="font-outfit font-bold text-slate-600 text-lg mt-2">{{ dishes[0].english_name }}</h3>
+                        <p class="text-sm text-slate-400 mt-1">{{ dishes[0].korean_name }}</p>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] bg-slate-200 text-slate-500 font-medium px-2.5 py-0.5 rounded-full">No Recipe</span>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Soup/Stew Compartment -->
+            <div class="md:col-span-3">
+                {% if dishes[1].has_recipe %}
+                <a href="/recipe/{{ dishes[1].recipe_id }}" class="block bg-slate-100 hover:bg-white text-slate-900 border-2 border-slate-300 rounded-2xl p-6 h-48 flex flex-col justify-between shadow-inner hover-lift cursor-pointer transition-all">
+                    <div>
+                        <span class="text-xs font-bold text-orange-600 uppercase">{{ dishes[1].role }}</span>
+                        <h3 class="font-outfit font-extrabold text-lg mt-2">{{ dishes[1].english_name }}</h3>
+                        <p class="text-sm text-gray-500 mt-1">{{ dishes[1].korean_name }}</p>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[11px] bg-orange-100 text-orange-800 font-bold px-3 py-1 rounded-full">View Recipe &rarr;</span>
+                    </div>
+                </a>
+                {% else %}
+                <div class="bg-slate-100 border-2 border-slate-300 rounded-2xl p-6 h-48 flex flex-col justify-between shadow-inner opacity-80">
+                    <div>
+                        <span class="text-xs font-bold text-slate-500 uppercase">{{ dishes[1].role }}</span>
+                        <h3 class="font-outfit font-bold text-slate-600 text-lg mt-2">{{ dishes[1].english_name }}</h3>
+                        <p class="text-sm text-slate-400 mt-1">{{ dishes[1].korean_name }}</p>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] bg-slate-200 text-slate-500 font-medium px-2.5 py-0.5 rounded-full">No Recipe</span>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Calories & Metadata footer on Tray -->
+        <div class="mt-6 flex justify-between items-center text-xs font-bold text-slate-600 px-2">
+            <span>🔋 Caloric Value: {{ meal.calories }}</span>
+            <span>🏫 Standard Meal Portion</span>
+        </div>
+    </div>
+
+    <!-- Monetization Banner - School Tray Purchase Promotion -->
+    <div class="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-100 rounded-2xl p-6 shadow-sm max-w-3xl mx-auto flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0 md:space-x-6">
+        <div class="space-y-1">
+            <span class="text-xs font-bold text-orange-600 uppercase tracking-widest">Premium Quality Meal Tray</span>
+            <h3 class="text-lg font-outfit font-bold text-gray-900">Want the full Korean School Lunch Experience?</h3>
+            <p class="text-sm text-gray-600">Get your own authentic 5-compartment stainless steel tray to enjoy healthy meals at home.</p>
+        </div>
+        <div>
+            <a href="{{ tray_affiliate_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center space-x-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold text-sm px-6 py-3 rounded-xl transition-all shadow-md transform hover:scale-[1.02]">
+                <span>Buy Tray on Amazon</span>
+                <span class="text-xs">🛒</span>
+            </a>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
