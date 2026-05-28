@@ -1,9 +1,4 @@
 fastapi
-uvicorn
 jinja2
-sqlalchemy
 httpx
-google-generativeai
-openai
-python-dotenv
 pydantic

@@ -1,43 +1,96 @@
 import json
 import logging
+import httpx
 from typing import Dict, Any, Optional
 from app.config import settings
-from app.schemas import RecipeTranslationResponse
 from app.db_adapter import get_db_adapter
 
 logger = logging.getLogger(__name__)
 
-# LLM API 지연 로딩용 전역 변수
-_gemini_model = None
-_openai_client = None
+# JSON schema example for LLM prompting
+JSON_FORMAT_PROMPT = """
+You MUST return ONLY valid JSON in this exact structure:
+{
+  "english_name": "Descriptive English name",
+  "english_ingredients": [
+    {"name": "Ingredient name", "amount": "Amount"}
+  ],
+  "local_substitutes": [
+    {"original": "Korean ingredient", "substitute": "Local substitute", "reason": "Reason"}
+  ],
+  "instructions": [
+    "Step 1", "Step 2"
+  ],
+  "seo_description": "Short SEO description",
+  "nutrition_info": {
+    "calories": "350 kcal",
+    "carbs": "40g",
+    "protein": "15g",
+    "fat": "10g"
+  }
+}
+"""
 
-def get_gemini_model():
-    global _gemini_model
-    if _gemini_model is None:
-        import google.generativeai as genai
-        if not settings.GEMINI_API_KEY:
-            raise ValueError("GEMINI_API_KEY가 구성되지 않았습니다.")
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        # 토큰 절약과 경제적인 호출을 위해 비용 효율적인 gemini-2.5-flash 모델 적용
-        _gemini_model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash",
-            generation_config={
-                "response_mime_type": "application/json",
-                "response_schema": RecipeTranslationResponse,
-                "temperature": 0.2,
-            },
-            system_instruction="You are a professional chef and SEO specialist. Translate the Korean school lunch dish name into a global recipe and localize it for Western markets. Provide short, concise instructions. Waste no tokens on explanation."
-        )
-    return _gemini_model
+async def call_gemini_api_async(prompt: str) -> Optional[Dict[str, Any]]:
+    if not settings.GEMINI_API_KEY:
+        raise ValueError("GEMINI_API_KEY is not configured.")
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={settings.GEMINI_API_KEY}"
+    
+    payload = {
+        "system_instruction": {
+            "parts": [
+                {"text": "You are a professional chef and SEO specialist. Translate the Korean school lunch dish name into a global recipe and localize it for Western markets. Provide short, concise instructions. Waste no tokens on explanation.\n" + JSON_FORMAT_PROMPT}
+            ]
+        },
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt}
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.2,
+            "responseMimeType": "application/json"
+        }
+    }
+    
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, json=payload, timeout=30.0)
+        resp.raise_for_status()
+        data = resp.json()
+        
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        return json.loads(text)
 
-def get_openai_client():
-    global _openai_client
-    if _openai_client is None:
-        from openai import OpenAI
-        if not settings.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY가 구성되지 않았습니다.")
-        _openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
-    return _openai_client
+async def call_openai_api_async(prompt: str) -> Optional[Dict[str, Any]]:
+    if not settings.OPENAI_API_KEY:
+        raise ValueError("OPENAI_API_KEY is not configured.")
+    
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {"role": "system", "content": "You are a professional chef. Translate the Korean dish into a localized recipe. No talk, JSON only.\n" + JSON_FORMAT_PROMPT},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.2,
+        "response_format": {"type": "json_object"}
+    }
+    
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, headers=headers, json=payload, timeout=30.0)
+        resp.raise_for_status()
+        data = resp.json()
+        
+        text = data["choices"][0]["message"]["content"]
+        return json.loads(text)
 
 async def translate_and_localize_recipe(korean_name: str, db_adapter=None) -> Optional[Dict[str, Any]]:
     """
@@ -48,7 +101,6 @@ async def translate_and_localize_recipe(korean_name: str, db_adapter=None) -> Op
     if not korean_name or korean_name.strip() in ["", "Rice", "Soup", "Side 1", "Side 2", "Side 3"]:
         return None
 
-    # DB 어댑터가 주어지지 않은 경우 기본 어댑터 사용
     if db_adapter is None:
         db_adapter = get_db_adapter()
 
@@ -79,26 +131,12 @@ async def translate_and_localize_recipe(korean_name: str, db_adapter=None) -> Op
 
     try:
         if provider == "gemini":
-            logger.info(f"Gemini API 호출 (비용 효율적 모델 gemini-1.5-flash): {korean_name}")
-            model = get_gemini_model()
-            # 비동기 세션을 타지 않고 동기식 호출을 비동기로 래핑하거나 직접 동기 호출 처리
-            response = model.generate_content(prompt)
-            result_dict = json.loads(response.text)
+            logger.info(f"Gemini API 호출 (비용 효율적 모델 gemini-2.5-flash): {korean_name}")
+            result_dict = await call_gemini_api_async(prompt)
 
         elif provider == "openai":
             logger.info(f"OpenAI API 호출 (비용 효율적 모델 gpt-4o-mini): {korean_name}")
-            client = get_openai_client()
-            # gpt-4o-mini를 기본 비용 효율 모델로 설정하고 structured output 적용
-            response = client.beta.chat.completions.parse(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "You are a professional chef. Translate the Korean dish into a localized recipe. No talk, JSON only."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format=RecipeTranslationResponse,
-                temperature=0.2,
-            )
-            result_dict = json.loads(response.choices[0].message.content)
+            result_dict = await call_openai_api_async(prompt)
         else:
             raise ValueError(f"지원하지 않는 LLM 제공자 설정: {provider}")
 
@@ -128,7 +166,6 @@ async def translate_and_localize_recipe(korean_name: str, db_adapter=None) -> Op
                 json.dumps(result_dict.get("nutrition_info", {})),
             )
         )
-        # 방금 저장한 레시피 데이터 다시 가져오기 (ID 포함 반환용)
         saved_recipe = await db_adapter.fetch_one(
             "SELECT * FROM recipes WHERE korean_name = ?", (korean_name,)
         )
@@ -145,7 +182,6 @@ async def translate_and_localize_recipe(korean_name: str, db_adapter=None) -> Op
             }
     except Exception as e:
         logger.error(f"레시피 DB 캐시 저장 중 오류 발생: {e}")
-        # DB 저장에 실패하더라도 메모리 결과는 리턴하여 사용자 서비스 제공 보장
         return {
             "id": None,
             "korean_name": korean_name,
@@ -158,3 +194,4 @@ async def translate_and_localize_recipe(korean_name: str, db_adapter=None) -> Op
         }
 
     return None
+

@@ -8,9 +8,6 @@ dependencies = [
     "fastapi",
     "jinja2",
     "httpx",
-    "google-generativeai",
-    "openai",
-    "python-dotenv",
     "pydantic"
 ]
 
