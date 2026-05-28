@@ -1,4 +1,0 @@
-fastapi
-jinja2
-httpx
-pydantic
