@@ -3,7 +3,7 @@ name: Deploy to Cloudflare Workers
 on:
   push:
     branches:
-      - main  # main 브랜치에 push될 때 트리거
+      - main
 
 jobs:
   deploy:
@@ -15,6 +15,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
+          relative-to-project: false
           python-version: '3.11'
 
       - name: Install uv (Fast Package Manager)
@@ -27,8 +28,8 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Deploy via Wrangler CLI
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

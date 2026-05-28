@@ -1,4 +1,5 @@
 .venv/
+.venv-workers/
 __pycache__/
 *.pyc
 .wrangler/
