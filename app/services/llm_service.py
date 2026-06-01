@@ -37,7 +37,7 @@ async def call_gemini_api_async(prompt: str, api_key: str = None) -> Optional[Di
     if not key:
         raise ValueError("GEMINI_API_KEY is not configured.")
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={key}"
 
     system_text = "You are a professional chef and SEO specialist. Translate the Korean school lunch dish name into a global recipe and localize it for Western markets. Provide short, concise instructions. Waste no tokens on explanation.\n" + JSON_FORMAT_PROMPT
     payload = {
