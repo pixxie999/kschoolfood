@@ -13,8 +13,7 @@ except ImportError:
     class WorkerEntrypoint:
         pass
     class Response:
-        @staticmethod
-        def new(body, headers=None, status=200):
+        def __init__(self, body, headers=None, status=200):
             pass
 
 from app.db_adapter import get_db_adapter
@@ -46,7 +45,7 @@ async def render_index(url, env):
     meal = await db.fetch_one("SELECT * FROM meal_trays WHERE date = ?", (date,))
     
     if not meal:
-        neis_meal = await fetch_meal_from_neis(date)
+        neis_meal = await fetch_meal_from_neis(date, env=env)
         if neis_meal:
             await db.execute(
                 """
@@ -81,7 +80,7 @@ async def render_index(url, env):
         ko_name = dish["korean"]
         en_recipe = None
         if ko_name and ko_name.strip() not in ["", "No School Lunch", "Weekend or Public Holiday", "Enjoy your break!", "No Menu Available", "See you on weekdays"]:
-            en_recipe = await translate_and_localize_recipe(ko_name, db)
+            en_recipe = await translate_and_localize_recipe(ko_name, db, env=env)
         
         translated_dishes.append({
             "role": dish["role"],
@@ -112,13 +111,13 @@ async def render_index(url, env):
         prev_date=prev_date,
         next_date=next_date
     )
-    return Response.new(html, headers={"Content-Type": "text/html; charset=utf-8"})
+    return Response(html, headers={"Content-Type": "text/html; charset=utf-8"})
 
 async def render_recipe(recipe_id, env):
     db = get_db_adapter(env)
     recipe_row = await db.fetch_one("SELECT * FROM recipes WHERE id = ?", (recipe_id,))
     if not recipe_row:
-        return Response.new("Recipe not found", status=404)
+        return Response("Recipe not found", status=404)
 
     ingredients = json.loads(recipe_row["english_ingredients"]) if recipe_row["english_ingredients"] else []
     substitutes = json.loads(recipe_row["local_substitutes"]) if recipe_row["local_substitutes"] else []
@@ -155,7 +154,7 @@ async def render_recipe(recipe_id, env):
         tray_affiliate_url=tray_affiliate_url,
         ld_json=json.dumps(ld_json)
     )
-    return Response.new(html, headers={"Content-Type": "text/html; charset=utf-8"})
+    return Response(html, headers={"Content-Type": "text/html; charset=utf-8"})
 
 async def render_sitemap(host, env):
     db = get_db_adapter(env)
@@ -168,7 +167,7 @@ async def render_sitemap(host, env):
         xml_content += f'  <url>\n    <loc>{host}/recipe/{r["id"]}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>\n'
     xml_content += '</urlset>'
     
-    return Response.new(xml_content, headers={"Content-Type": "application/xml; charset=utf-8"})
+    return Response(xml_content, headers={"Content-Type": "application/xml; charset=utf-8"})
 
 class Default(WorkerEntrypoint):
     async def on_fetch(self, request):
@@ -184,8 +183,8 @@ class Default(WorkerEntrypoint):
                 recipe_id = int(path.split("/")[-1])
                 return await render_recipe(recipe_id, env)
             except ValueError:
-                return Response.new("Invalid recipe ID", status=400)
+                return Response("Invalid recipe ID", status=400)
         elif path == "/sitemap.xml":
             return await render_sitemap(host, env)
         else:
-            return Response.new("Not Found", status=404)
+            return Response("Not Found", status=404)

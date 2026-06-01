@@ -31,11 +31,12 @@ You MUST return ONLY valid JSON in this exact structure:
 }
 """
 
-async def call_gemini_api_async(prompt: str) -> Optional[Dict[str, Any]]:
-    if not settings.GEMINI_API_KEY:
+async def call_gemini_api_async(prompt: str, api_key: str = None) -> Optional[Dict[str, Any]]:
+    key = api_key or settings.GEMINI_API_KEY
+    if not key:
         raise ValueError("GEMINI_API_KEY is not configured.")
-    
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={settings.GEMINI_API_KEY}"
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
     
     payload = {
         "system_instruction": {
@@ -64,13 +65,14 @@ async def call_gemini_api_async(prompt: str) -> Optional[Dict[str, Any]]:
         text = data["candidates"][0]["content"]["parts"][0]["text"]
         return json.loads(text)
 
-async def call_openai_api_async(prompt: str) -> Optional[Dict[str, Any]]:
-    if not settings.OPENAI_API_KEY:
+async def call_openai_api_async(prompt: str, api_key: str = None) -> Optional[Dict[str, Any]]:
+    key = api_key or settings.OPENAI_API_KEY
+    if not key:
         raise ValueError("OPENAI_API_KEY is not configured.")
-    
+
     url = "https://api.openai.com/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+        "Authorization": f"Bearer {key}",
         "Content-Type": "application/json"
     }
     
@@ -92,7 +94,17 @@ async def call_openai_api_async(prompt: str) -> Optional[Dict[str, Any]]:
         text = data["choices"][0]["message"]["content"]
         return json.loads(text)
 
-async def translate_and_localize_recipe(korean_name: str, db_adapter=None) -> Optional[Dict[str, Any]]:
+def _get_setting(key: str, env=None, default: str = "") -> str:
+    if env is not None:
+        try:
+            val = getattr(env, key, None)
+            if val:
+                return str(val)
+        except Exception:
+            pass
+    return os.getenv(key, default)
+
+async def translate_and_localize_recipe(korean_name: str, db_adapter=None, env=None) -> Optional[Dict[str, Any]]:
     """
     한국어 메뉴명을 영어 레시피, 대체 재료, SEO 설명 등으로 번역 및 로컬라이징합니다.
     경제적 처리를 위해 먼저 DB 캐시를 체크하여 이미 가공된 레시피가 있다면 즉시 반환하고,
@@ -125,18 +137,21 @@ async def translate_and_localize_recipe(korean_name: str, db_adapter=None) -> Op
         logger.error(f"레시피 DB 캐시 검사 중 오류 발생: {e}")
 
     # 2. 캐시 미스 시 LLM 호출 (Gemini 또는 OpenAI)
-    provider = settings.ACTIVE_LLM_PROVIDER
+    provider = _get_setting("ACTIVE_LLM_PROVIDER", env) or settings.ACTIVE_LLM_PROVIDER
     prompt = f"Translate and create a global localized recipe for: '{korean_name}'"
     result_dict = None
+
+    gemini_key = _get_setting("GEMINI_API_KEY", env) or settings.GEMINI_API_KEY
+    openai_key = _get_setting("OPENAI_API_KEY", env) or settings.OPENAI_API_KEY
 
     try:
         if provider == "gemini":
             logger.info(f"Gemini API 호출 (비용 효율적 모델 gemini-2.5-flash): {korean_name}")
-            result_dict = await call_gemini_api_async(prompt)
+            result_dict = await call_gemini_api_async(prompt, api_key=gemini_key)
 
         elif provider == "openai":
             logger.info(f"OpenAI API 호출 (비용 효율적 모델 gpt-4o-mini): {korean_name}")
-            result_dict = await call_openai_api_async(prompt)
+            result_dict = await call_openai_api_async(prompt, api_key=openai_key)
         else:
             raise ValueError(f"지원하지 않는 LLM 제공자 설정: {provider}")
 

@@ -74,32 +74,31 @@ class D1Adapter:
     def __init__(self, d1_binding):
         self.db = d1_binding
 
+    def _to_dict(self, proxy) -> Dict[str, Any]:
+        try:
+            return proxy.to_py()
+        except Exception:
+            try:
+                return dict(proxy)
+            except Exception:
+                return {}
+
     async def fetch_all(self, query: str, params: tuple = ()) -> List[Dict[str, Any]]:
         stmt = self.db.prepare(query)
         if params:
             stmt = stmt.bind(*params)
         result = await stmt.all()
-        
-        # JS Proxy 객체 또는 딕셔너리에서 'results' 데이터 추출
+
+        raw = []
         if hasattr(result, "results"):
-            return list(result.results)
+            raw = list(result.results)
         elif isinstance(result, dict) and "results" in result:
-            return result["results"]
-        return []
+            raw = result["results"]
+        return [self._to_dict(r) for r in raw]
 
     async def fetch_one(self, query: str, params: tuple = ()) -> Optional[Dict[str, Any]]:
-        stmt = self.db.prepare(query)
-        if params:
-            stmt = stmt.bind(*params)
-        result = await stmt.all()
-        
-        results = []
-        if hasattr(result, "results"):
-            results = list(result.results)
-        elif isinstance(result, dict) and "results" in result:
-            results = result["results"]
-            
-        return results[0] if results else None
+        rows = await self.fetch_all(query, params)
+        return rows[0] if rows else None
 
     async def execute(self, query: str, params: tuple = ()) -> bool:
         stmt = self.db.prepare(query)

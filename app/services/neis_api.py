@@ -18,23 +18,37 @@ def clean_dish_name(name: str) -> str:
     name = name.replace('*', '').strip()
     return name
 
-async def fetch_meal_from_neis(date_str: str) -> Optional[Dict[str, Any]]:
+def _get_setting(key: str, env=None, default: str = "") -> str:
+    if env is not None:
+        try:
+            val = getattr(env, key, None)
+            if val:
+                return str(val)
+        except Exception:
+            pass
+    return os.getenv(key, default)
+
+async def fetch_meal_from_neis(date_str: str, env=None) -> Optional[Dict[str, Any]]:
     """
     NEIS Open API로부터 특정 날짜(YYYYMMDD)의 급식 식단을 가져와 파싱합니다.
     데이터가 없거나 오류 발생 시 None을 반환합니다.
     """
-    if not settings.NEIS_API_KEY:
+    neis_key = _get_setting("NEIS_API_KEY", env) or settings.NEIS_API_KEY
+    office_code = _get_setting("OFFICE_CODE", env) or settings.OFFICE_CODE
+    school_code = _get_setting("SCHOOL_CODE", env) or settings.SCHOOL_CODE
+
+    if not neis_key:
         logger.warning("NEIS_API_KEY가 설정되지 않았습니다. API 호출을 건너뜁니다.")
         return None
 
     url = "https://open.neis.go.kr/hub/mealServiceDietInfo"
     params = {
-        "KEY": settings.NEIS_API_KEY,
+        "KEY": neis_key,
         "Type": "json",
         "pIndex": 1,
         "pSize": 100,
-        "ATPT_OFCDC_SC_CODE": settings.OFFICE_CODE,
-        "SD_SCHUL_CODE": settings.SCHOOL_CODE,
+        "ATPT_OFCDC_SC_CODE": office_code,
+        "SD_SCHUL_CODE": school_code,
         "MLSV_YMD": date_str
     }
 
