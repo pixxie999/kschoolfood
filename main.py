@@ -171,7 +171,7 @@ async def render_sitemap(host, env):
     return Response.new(xml_content, headers={"Content-Type": "application/xml; charset=utf-8"})
 
 class Default(WorkerEntrypoint):
-    async def fetch(self, request, env=None):
+    async def on_fetch(self, request, env=None):
         url = urlparse(request.url)
         host = f"{url.scheme}://{url.netloc}"
         
