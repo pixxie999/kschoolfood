@@ -48,18 +48,23 @@ async def call_gemini_api_async(prompt: str, api_key: str = None) -> Optional[Di
             }
         ],
         "generationConfig": {
-            "temperature": 0.2,
-            "responseMimeType": "application/json"
+            "temperature": 0.2
         }
     }
-    
+
     async with httpx.AsyncClient(headers={"Accept-Encoding": "identity"}) as client:
         resp = await client.post(url, json=payload, timeout=30.0)
         resp.raise_for_status()
         data = resp.json()
 
         text = data["candidates"][0]["content"]["parts"][0]["text"]
-        return json.loads(text)
+        # JSON 블록 추출 (```json ... ``` 감싸진 경우 대응)
+        text = text.strip()
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        return json.loads(text.strip())
 
 async def call_openai_api_async(prompt: str, api_key: str = None) -> Optional[Dict[str, Any]]:
     key = api_key or settings.OPENAI_API_KEY
