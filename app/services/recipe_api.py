@@ -35,24 +35,27 @@ async def search_recipe_from_public(korean_name: str, env=None) -> Optional[Dict
     try:
         async with httpx.AsyncClient(headers={"Accept-Encoding": "identity"}) as client:
             resp = await client.get(url, timeout=10.0)
-            resp.raise_for_status()
-            data = resp.json()
+            data = resp.json() if resp.is_success else {}
 
         rows = data.get("COOKRCP01", {}).get("row", [])
+
+        # 3글자 앞부분으로 재시도
         if not rows:
-            # 첫 단어만으로 재시도 (예: "쇠고기무국" → "무국")
             first_word = search_term[:3]
             if first_word != search_term:
                 url2 = f"https://openapi.foodsafetykorea.go.kr/api/{api_key}/COOKRCP01/json/1/5/RCP_NM={first_word}"
-                resp2 = await client.get(url2, timeout=10.0)
-                if resp2.is_success:
-                    rows = resp2.json().get("COOKRCP01", {}).get("row", [])
+                try:
+                    async with httpx.AsyncClient(headers={"Accept-Encoding": "identity"}) as client2:
+                        resp2 = await client2.get(url2, timeout=10.0)
+                        if resp2.is_success:
+                            rows = resp2.json().get("COOKRCP01", {}).get("row", [])
+                except Exception:
+                    pass
 
         if not rows:
             return None
 
-        row = rows[0]
-        return _parse_recipe_row(row)
+        return _parse_recipe_row(rows[0])
 
     except Exception as e:
         logger.error(f"COOKRCP01 API 호출 오류: {e}")

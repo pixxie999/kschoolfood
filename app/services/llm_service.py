@@ -54,7 +54,7 @@ async def call_claude_api(prompt: str, api_key: str) -> Optional[Dict[str, Any]]
         "content-type": "application/json",
     }
     payload = {
-        "model": "claude-haiku-4-5",
+        "model": "claude-haiku-4-5-20251001",
         "max_tokens": 1024,
         "system": "You are a professional chef and SEO specialist. Translate Korean school lunch dishes into English recipes for a global audience. Be concise. Return only valid JSON, no extra text.\n" + JSON_FORMAT_PROMPT,
         "messages": [{"role": "user", "content": prompt}],
