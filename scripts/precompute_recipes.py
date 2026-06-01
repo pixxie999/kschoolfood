@@ -81,19 +81,41 @@ def fetch_neis_menu(date_str: str) -> list:
         return []
 
 
+def _clean_for_search(name: str) -> str:
+    """COOKRCP01 검색을 위해 메뉴명 정제:
+    - 알레르기 번호 제거: '불고기 (5.6.10)' → '불고기'
+    - 쉼표 이후 제거: '배추김치, 우유' → '배추김치'
+    - 괄호 내용 제거: '너비아니구이(오븐)' → '너비아니구이'
+    """
+    import re
+    name = name.split(",")[0]  # 쉼표 첫 번째 항목만
+    name = re.sub(r'\s*[\(\（][^）)]*[\)\）]', '', name)  # 괄호 제거
+    return name.strip()
+
+
 def search_cookrcp01(korean_name: str) -> dict:
     if not COOKRCP01_API_KEY:
         return {}
-    search_term = korean_name.strip()
-    url = f"https://openapi.foodsafetykorea.go.kr/api/{COOKRCP01_API_KEY}/COOKRCP01/json/1/5/RCP_NM={search_term}"
+    # 1차: 정제된 전체 이름으로 검색
+    clean_name = _clean_for_search(korean_name)
+    search_terms = [clean_name]
+    # 2차: 앞 4글자
+    if len(clean_name) > 4:
+        search_terms.append(clean_name[:4])
+    # 3차: 앞 3글자
+    if len(clean_name) > 3:
+        search_terms.append(clean_name[:3])
+
     try:
-        r = requests.get(url, timeout=10)
-        data = r.json() if r.ok else {}
-        rows = data.get("COOKRCP01", {}).get("row", [])
-        if not rows and len(search_term) > 3:
-            url2 = f"https://openapi.foodsafetykorea.go.kr/api/{COOKRCP01_API_KEY}/COOKRCP01/json/1/5/RCP_NM={search_term[:3]}"
-            r2 = requests.get(url2, timeout=10)
-            rows = r2.json().get("COOKRCP01", {}).get("row", []) if r2.ok else []
+        rows = []
+        for term in search_terms:
+            url = f"https://openapi.foodsafetykorea.go.kr/api/{COOKRCP01_API_KEY}/COOKRCP01/json/1/5/RCP_NM={term}"
+            r = requests.get(url, timeout=10)
+            data = r.json() if r.ok else {}
+            rows = data.get("COOKRCP01", {}).get("row", [])
+            if rows:
+                break
+            time.sleep(0.2)
         if not rows:
             return {}
         row = rows[0]
@@ -270,16 +292,23 @@ def main():
             logger.error(f"실패 ({name}): {e}")
         time.sleep(1)
 
-    # 기존 레시피 중 이미지 없는 것 보완 (Unsplash)
-    if UNSPLASH_ACCESS_KEY:
-        no_img = get_recipes_without_images()
-        logger.info(f"이미지 없는 기존 레시피: {len(no_img)}개 보완 중")
-        for row in no_img:
-            img = fetch_unsplash_image(row["english_name"])
-            if img:
-                update_recipe_image(row["korean_name"], img)
-                logger.info(f"이미지 추가: {row['korean_name']}")
+    # 기존 레시피 중 이미지 없는 것 보완 (COOKRCP01 → Unsplash 순)
+    no_img = get_recipes_without_images()
+    logger.info(f"이미지 없는 기존 레시피: {len(no_img)}개 보완 중")
+    for row in no_img:
+        img = ""
+        # 1순위: COOKRCP01 재시도 (정제된 이름으로)
+        if COOKRCP01_API_KEY:
+            public = search_cookrcp01(row["korean_name"])
+            img = public.get("image_url", "")
+            time.sleep(0.3)
+        # 2순위: Unsplash
+        if not img and UNSPLASH_ACCESS_KEY:
+            img = fetch_unsplash_image(row.get("english_name") or row["korean_name"])
             time.sleep(0.5)
+        if img:
+            update_recipe_image(row["korean_name"], img)
+            logger.info(f"이미지 추가: {row['korean_name']}")
 
     logger.info("완료")
 
