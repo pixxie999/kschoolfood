@@ -46,7 +46,7 @@ def _get_setting(key: str, env=None, default: str = "") -> str:
 async def call_claude_api(prompt: str, api_key: str) -> Optional[Dict[str, Any]]:
     if not api_key:
         raise ValueError("ANTHROPIC_API_KEY is not configured.")
-    logger.info(f"Claude API 키 길이: {len(api_key)}, 시작: {api_key[:10]}")
+    logger.error(f"Claude API 키 길이: {len(api_key)}, 시작: {api_key[:10]}")
 
     url = "https://api.anthropic.com/v1/messages"
     headers = {
