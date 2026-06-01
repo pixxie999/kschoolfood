@@ -159,15 +159,26 @@ async def render_recipe(recipe_id, env):
 async def render_sitemap(host, env):
     db = get_db_adapter(env)
     recipes = await db.fetch_all("SELECT id FROM recipes")
-    
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
     xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
     xml_content += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-    xml_content += f'  <url>\n    <loc>{host}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n'
+    xml_content += f'  <url>\n    <loc>{host}/</loc>\n    <lastmod>{today}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n'
     for r in recipes:
-        xml_content += f'  <url>\n    <loc>{host}/recipe/{r["id"]}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>\n'
+        xml_content += f'  <url>\n    <loc>{host}/recipe/{r["id"]}</loc>\n    <lastmod>{today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>\n'
     xml_content += '</urlset>'
-    
+
     return Response(xml_content, headers={"Content-Type": "application/xml; charset=utf-8"})
+
+
+async def render_robots(host):
+    txt = f"""User-agent: *
+Allow: /
+Disallow:
+
+Sitemap: {host}/sitemap.xml
+"""
+    return Response(txt, headers={"Content-Type": "text/plain; charset=utf-8"})
 
 class Default(WorkerEntrypoint):
     async def on_fetch(self, request):
@@ -186,5 +197,7 @@ class Default(WorkerEntrypoint):
                 return Response("Invalid recipe ID", status=400)
         elif path == "/sitemap.xml":
             return await render_sitemap(host, env)
+        elif path == "/robots.txt":
+            return await render_robots(host)
         else:
             return Response("Not Found", status=404)

@@ -2,9 +2,10 @@
 
 {% block title %}{{ recipe.english_name }} Recipe - K-School Food{% endblock %}
 {% block meta_desc %}{{ recipe.seo_description }}{% endblock %}
-
+{% block canonical %}https://kschoolfood.pixxie999.workers.dev/recipe/{{ recipe.id }}{% endblock %}
 {% block og_title %}{{ recipe.english_name }} Recipe | Korean School Meal Localization{% endblock %}
 {% block og_desc %}{{ recipe.seo_description }}{% endblock %}
+{% block og_url %}https://kschoolfood.pixxie999.workers.dev/recipe/{{ recipe.id }}{% endblock %}
 
 {% block head_extra %}
 <!-- Dynamic LD+JSON Recipe Structured Data -->

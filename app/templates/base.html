@@ -6,10 +6,26 @@
     <title>{% block title %}K-School Food - Authentic & Healthy Recipes{% endblock %}</title>
     <meta name="description" content="{% block meta_desc %}Discover the authentic and healthy Korean school lunch recipes and find local substitute ingredients easily.{% endblock %}">
     
+    <!-- 네이버 사이트 인증 -->
+    <meta name="naver-site-verification" content="106d9e8011678d78e46fa486e41afb067a1ff5f4" />
+
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-CRZF966L52"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-CRZF966L52');
+    </script>
+
+    <!-- Canonical & Sitemap -->
+    <link rel="canonical" href="{% block canonical %}https://kschoolfood.pixxie999.workers.dev/{% endblock %}">
+
     <!-- OpenGraph Tags for Social Networks (Pinterest/Instagram) -->
     <meta property="og:title" content="{% block og_title %}K-School Food - Healthy School Lunch Recipes{% endblock %}">
     <meta property="og:description" content="{% block og_desc %}Explore daily Korean school lunch menu translated with local substitutes and shopping links.{% endblock %}">
     <meta property="og:type" content="website">
+    <meta property="og:url" content="{% block og_url %}https://kschoolfood.pixxie999.workers.dev/{% endblock %}">
     <meta property="og:image" content="https://images.unsplash.com/photo-1541832676-9b763b0239ab?q=80&w=600">
     
     <!-- Google Fonts -->
