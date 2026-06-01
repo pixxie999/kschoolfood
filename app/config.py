@@ -1,8 +1,10 @@
 import os
-from dotenv import load_dotenv
 
-# .env 파일 로드
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 class Settings:
     NEIS_API_KEY: str = os.getenv("NEIS_API_KEY", "")
