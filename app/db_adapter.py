@@ -110,6 +110,11 @@ class D1Adapter:
 
 
 def get_db_adapter(env=None) -> Union[D1Adapter, LocalSQLiteAdapter]:
-    if env and hasattr(env, "DB"):
-        return D1Adapter(env.DB)
+    try:
+        if env is not None:
+            db = env.DB
+            if db is not None:
+                return D1Adapter(db)
+    except Exception:
+        pass
     return LocalSQLiteAdapter()
