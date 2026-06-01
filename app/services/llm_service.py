@@ -54,6 +54,8 @@ async def call_gemini_api_async(prompt: str, api_key: str = None) -> Optional[Di
 
     async with httpx.AsyncClient(headers={"Accept-Encoding": "identity"}) as client:
         resp = await client.post(url, json=payload, timeout=30.0)
+        if not resp.is_success:
+            logger.error(f"Gemini API 에러 응답 본문: {resp.text[:500]}")
         resp.raise_for_status()
         data = resp.json()
 
