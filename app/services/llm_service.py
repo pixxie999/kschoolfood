@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import httpx
 from typing import Dict, Any, Optional
 from app.config import settings
