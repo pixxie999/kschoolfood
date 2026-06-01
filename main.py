@@ -171,10 +171,11 @@ async def render_sitemap(host, env):
     return Response.new(xml_content, headers={"Content-Type": "application/xml; charset=utf-8"})
 
 class Default(WorkerEntrypoint):
-    async def on_fetch(self, request, env=None):
+    async def on_fetch(self, request):
+        env = getattr(self, 'env', None)
         url = urlparse(request.url)
         host = f"{url.scheme}://{url.netloc}"
-        
+
         path = url.path
         if path == "/" or path == "":
             return await render_index(url, env)
