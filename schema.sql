@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS recipes (
     local_substitutes TEXT,
     instructions TEXT,
     seo_description TEXT,
-    nutrition_info TEXT
+    nutrition_info TEXT,
+    image_url TEXT DEFAULT ''
 );
 
 -- AffiliateMapping 테이블 정의
