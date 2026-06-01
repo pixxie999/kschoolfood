@@ -15,7 +15,6 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          relative-to-project: false
           python-version: '3.12'
 
       - name: Install uv (Fast Package Manager)
@@ -26,7 +25,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Deploy via pywrangler
         run: uv run pywrangler deploy
