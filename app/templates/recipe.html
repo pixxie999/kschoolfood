@@ -17,19 +17,48 @@
 <div class="space-y-8 animate-fade-in">
 
     <!-- Recipe Title Header -->
-    <div class="bg-white border border-gray-100 rounded-2xl p-6 md:p-8 shadow-sm">
-        <a href="/" class="text-xs font-bold text-orange-500 hover:underline uppercase tracking-wider flex items-center space-x-1">
-            <span>&larr;</span> <span>Back to daily tray</span>
-        </a>
-        <h1 class="text-3xl md:text-4xl font-outfit font-extrabold text-gray-900 mt-3">
-            {{ recipe.english_name }}
-        </h1>
-        <p class="text-sm text-gray-500 mt-1">
-            Original Korean Name: <span class="font-semibold text-gray-700">{{ recipe.korean_name }}</span>
-        </p>
-        <p class="text-base text-gray-600 mt-4 leading-relaxed italic border-l-4 border-orange-200 pl-4">
-            "{{ recipe.seo_description }}"
-        </p>
+    <div class="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
+        {% if recipe.image_url %}
+        <div class="relative h-56 md:h-72 w-full">
+            <img src="{{ recipe.image_url }}"
+                 alt="{{ recipe.english_name }}"
+                 class="w-full h-full object-cover"
+                 loading="lazy"
+                 onerror="this.parentElement.style.display='none'">
+            <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+            <div class="absolute bottom-0 left-0 p-6 md:p-8">
+                <a href="/" class="text-xs font-bold text-orange-300 hover:underline uppercase tracking-wider flex items-center space-x-1 mb-2">
+                    <span>&larr;</span> <span>Back to daily tray</span>
+                </a>
+                <h1 class="text-3xl md:text-4xl font-outfit font-extrabold text-white drop-shadow">
+                    {{ recipe.english_name }}
+                </h1>
+                <p class="text-sm text-white/80 mt-1">
+                    Korean: <span class="font-semibold">{{ recipe.korean_name }}</span>
+                </p>
+            </div>
+        </div>
+        <div class="p-6 md:p-8 pt-4">
+            <p class="text-base text-gray-600 leading-relaxed italic border-l-4 border-orange-200 pl-4">
+                "{{ recipe.seo_description }}"
+            </p>
+        </div>
+        {% else %}
+        <div class="p-6 md:p-8">
+            <a href="/" class="text-xs font-bold text-orange-500 hover:underline uppercase tracking-wider flex items-center space-x-1">
+                <span>&larr;</span> <span>Back to daily tray</span>
+            </a>
+            <h1 class="text-3xl md:text-4xl font-outfit font-extrabold text-gray-900 mt-3">
+                {{ recipe.english_name }}
+            </h1>
+            <p class="text-sm text-gray-500 mt-1">
+                Original Korean Name: <span class="font-semibold text-gray-700">{{ recipe.korean_name }}</span>
+            </p>
+            <p class="text-base text-gray-600 mt-4 leading-relaxed italic border-l-4 border-orange-200 pl-4">
+                "{{ recipe.seo_description }}"
+            </p>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Main Grid: Ingredients & Substitutes (Left) and Instructions (Right) -->

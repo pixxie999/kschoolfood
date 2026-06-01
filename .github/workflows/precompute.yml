@@ -26,6 +26,7 @@ jobs:
           SCHOOL_CODE: '7801106'
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           COOKRCP01_API_KEY: ${{ secrets.COOKRCP01_API_KEY }}
+          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
           CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}

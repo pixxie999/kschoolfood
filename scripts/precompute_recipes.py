@@ -16,6 +16,7 @@ OFFICE_CODE = os.environ.get("OFFICE_CODE", "K10")
 SCHOOL_CODE = os.environ.get("SCHOOL_CODE", "7801106")
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 COOKRCP01_API_KEY = os.environ.get("COOKRCP01_API_KEY", "")
+UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY", "")
 CF_ACCOUNT_ID = os.environ["CF_ACCOUNT_ID"]
 CF_API_TOKEN = os.environ["CF_API_TOKEN"]
 D1_DATABASE_ID = os.environ["D1_DATABASE_ID"]
@@ -200,12 +201,49 @@ def save_recipe(korean_name: str, data: dict):
     )
 
 
+def fetch_unsplash_image(english_name: str) -> str:
+    """Unsplash에서 요리 이미지 URL을 가져옵니다. (무료, 상업용 가능)"""
+    if not UNSPLASH_ACCESS_KEY or not english_name:
+        return ""
+    try:
+        query = f"{english_name} korean food"
+        r = requests.get(
+            "https://api.unsplash.com/search/photos",
+            params={"query": query, "per_page": 1, "orientation": "landscape"},
+            headers={"Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"},
+            timeout=10,
+        )
+        if r.ok:
+            results = r.json().get("results", [])
+            if results:
+                # regular 크기 (1080px) 사용
+                return results[0]["urls"].get("regular", "")
+    except Exception as e:
+        logger.warning(f"Unsplash 오류 ({english_name}): {e}")
+    return ""
+
+
+def get_recipes_without_images() -> list:
+    """image_url이 비어있는 레시피 목록 반환."""
+    result = d1_query("SELECT korean_name, english_name FROM recipes WHERE image_url IS NULL OR image_url = ''")
+    rows = result["result"][0].get("results", [])
+    return rows
+
+
+def update_recipe_image(korean_name: str, image_url: str):
+    d1_query(
+        "UPDATE recipes SET image_url = ? WHERE korean_name = ?",
+        [image_url, korean_name],
+    )
+
+
 SKIP_NAMES = {"", "Rice", "Soup", "Side 1", "Side 2", "Side 3"}
 
 
 def main():
     today = datetime.now()
-    dates = [(today + timedelta(days=i)).strftime("%Y%m%d") for i in range(14)]
+    # 14일 → 7일로 단축 (비용 절감: NEIS API 호출 절반 감소)
+    dates = [(today + timedelta(days=i)).strftime("%Y%m%d") for i in range(7)]
 
     all_dishes = set()
     for date_str in dates:
@@ -222,11 +260,26 @@ def main():
         logger.info(f"번역 중: {name}")
         try:
             result = translate_recipe(name)
+            # COOKRCP01 이미지 없으면 Unsplash로 보완
+            if not result.get("image_url") and UNSPLASH_ACCESS_KEY:
+                result["image_url"] = fetch_unsplash_image(result.get("english_name", name))
+                time.sleep(0.5)
             save_recipe(name, result)
-            logger.info(f"저장 완료: {name} → {result.get('english_name', '')}")
+            logger.info(f"저장 완료: {name} → {result.get('english_name', '')} | 이미지: {'있음' if result.get('image_url') else '없음'}")
         except Exception as e:
             logger.error(f"실패 ({name}): {e}")
         time.sleep(1)
+
+    # 기존 레시피 중 이미지 없는 것 보완 (Unsplash)
+    if UNSPLASH_ACCESS_KEY:
+        no_img = get_recipes_without_images()
+        logger.info(f"이미지 없는 기존 레시피: {len(no_img)}개 보완 중")
+        for row in no_img:
+            img = fetch_unsplash_image(row["english_name"])
+            if img:
+                update_recipe_image(row["korean_name"], img)
+                logger.info(f"이미지 추가: {row['korean_name']}")
+            time.sleep(0.5)
 
     logger.info("완료")
 
