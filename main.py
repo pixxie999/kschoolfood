@@ -2,7 +2,7 @@ import os
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, quote
 from jinja2 import Environment, FileSystemLoader
 
 try:
@@ -28,13 +28,55 @@ def get_korean_today() -> str:
     kst = timezone(timedelta(hours=9))
     return datetime.now(kst).strftime("%Y%m%d")
 
+def get_week_dates(anchor: str) -> list:
+    """anchor 날짜가 속한 주의 월~금 날짜 리스트 반환"""
+    try:
+        dt = datetime.strptime(anchor, "%Y%m%d")
+    except ValueError:
+        kst = timezone(timedelta(hours=9))
+        dt = datetime.now(kst)
+    monday = dt - timedelta(days=dt.weekday())
+    return [(monday + timedelta(days=i)).strftime("%Y%m%d") for i in range(5)]
+
+async def _get_meal(date: str, db, env) -> dict:
+    """D1 캐시 → NEIS 순으로 meal 조회, 없으면 빈 dict"""
+    meal = await db.fetch_one("SELECT * FROM meal_trays WHERE date = ?", (date,))
+    if not meal:
+        neis_meal = await fetch_meal_from_neis(date, env=env)
+        if neis_meal:
+            await db.execute(
+                "INSERT INTO meal_trays (date, rice, soup, side1, side2, side3, calories, allergies) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (neis_meal["date"], neis_meal["rice"], neis_meal["soup"],
+                 neis_meal["side1"], neis_meal["side2"], neis_meal["side3"],
+                 neis_meal["calories"], neis_meal.get("allergies", "{}"))
+            )
+            meal = await db.fetch_one("SELECT * FROM meal_trays WHERE date = ?", (date,))
+    return meal or {}
+
+def _build_dishes(meal: dict, allergies: dict) -> list:
+    SKIP = {"", "No School Lunch", "Weekend or Public Holiday",
+            "Enjoy your break!", "No Menu Available", "See you on weekdays"}
+    roles = [
+        ("Main Rice",       "rice"),
+        ("Soup/Stew",       "soup"),
+        ("Banchan (Side 1)","side1"),
+        ("Banchan (Side 2)","side2"),
+        ("Banchan (Side 3)","side3"),
+    ]
+    return [
+        {
+            "role": role, "key": key,
+            "korean_name": meal.get(key, ""),
+            "allergies": allergies.get(key, []),
+        }
+        for role, key in roles
+        if meal.get(key, "") not in SKIP
+    ]
+
 async def render_index(url, env):
     query = parse_qs(url.query)
-    date = query.get("date", [None])[0] if "date" in query else None
-    
-    if not date:
-        date = get_korean_today()
-    
+    date = query.get("date", [None])[0] or get_korean_today()
+
     try:
         parsed_date = datetime.strptime(date, "%Y%m%d")
         formatted_date = parsed_date.strftime("%Y-%m-%d (%A)")
@@ -42,76 +84,143 @@ async def render_index(url, env):
         formatted_date = date
 
     db = get_db_adapter(env)
-    meal = await db.fetch_one("SELECT * FROM meal_trays WHERE date = ?", (date,))
-    
-    if not meal:
-        neis_meal = await fetch_meal_from_neis(date, env=env)
-        if neis_meal:
-            await db.execute(
-                """
-                INSERT INTO meal_trays (date, rice, soup, side1, side2, side3, calories)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    neis_meal["date"], neis_meal["rice"], neis_meal["soup"],
-                    neis_meal["side1"], neis_meal["side2"], neis_meal["side3"],
-                    neis_meal["calories"]
-                )
-            )
-            meal = await db.fetch_one("SELECT * FROM meal_trays WHERE date = ?", (date,))
-    
+    meal = await _get_meal(date, db, env)
+
     if not meal:
         meal = {
             "date": date, "rice": "No School Lunch", "soup": "Weekend or Public Holiday",
             "side1": "Enjoy your break!", "side2": "No Menu Available",
-            "side3": "See you on weekdays", "calories": "0 Kcal"
+            "side3": "See you on weekdays", "calories": "0 Kcal", "allergies": "{}"
         }
 
-    dishes = [
-        {"role": "Main Rice", "korean": meal.get("rice"), "key": "rice"},
-        {"role": "Soup/Stew", "korean": meal.get("soup"), "key": "soup"},
-        {"role": "Banchan (Side 1)", "korean": meal.get("side1"), "key": "side1"},
-        {"role": "Banchan (Side 2)", "korean": meal.get("side2"), "key": "side2"},
-        {"role": "Banchan (Side 3)", "korean": meal.get("side3"), "key": "side3"},
-    ]
+    try:
+        allergies = json.loads(meal.get("allergies") or "{}")
+    except Exception:
+        allergies = {}
 
+    dishes_raw = _build_dishes(meal, allergies)
     translated_dishes = []
-    for dish in dishes:
-        ko_name = dish["korean"]
-        en_recipe = None
-        if ko_name and ko_name.strip() not in ["", "No School Lunch", "Weekend or Public Holiday", "Enjoy your break!", "No Menu Available", "See you on weekdays"]:
-            en_recipe = await translate_and_localize_recipe(ko_name, db, env=env)
-        
+    for dish in dishes_raw:
+        ko = dish["korean_name"]
+        recipe = await translate_and_localize_recipe(ko, db, env=env) if ko else None
         translated_dishes.append({
-            "role": dish["role"],
-            "korean_name": ko_name,
-            "key": dish["key"],
-            "english_name": en_recipe.get("english_name") if en_recipe else ko_name,
-            "recipe_id": en_recipe.get("id") if en_recipe else None,
-            "has_recipe": en_recipe is not None
+            **dish,
+            "english_name": recipe.get("english_name") if recipe else ko,
+            "recipe_id": recipe.get("id") if recipe else None,
+            "has_recipe": recipe is not None,
         })
+
+    # 빠진 칸 채우기 (5칸 유지)
+    all_keys = ["rice","soup","side1","side2","side3"]
+    present = {d["key"] for d in translated_dishes}
+    for role, key in [("Main Rice","rice"),("Soup/Stew","soup"),
+                      ("Banchan (Side 1)","side1"),("Banchan (Side 2)","side2"),
+                      ("Banchan (Side 3)","side3")]:
+        if key not in present:
+            translated_dishes.insert(all_keys.index(key), {
+                "role": role, "key": key, "korean_name": meal.get(key,""),
+                "allergies": [], "english_name": meal.get(key,""),
+                "recipe_id": None, "has_recipe": False
+            })
 
     tray_affiliate_url = await get_tray_affiliate_link(db)
 
     try:
-        current_dt = datetime.strptime(date, "%Y%m%d")
-        prev_date = (current_dt - timedelta(days=1)).strftime("%Y%m%d")
-        next_date = (current_dt + timedelta(days=1)).strftime("%Y%m%d")
+        cur = datetime.strptime(date, "%Y%m%d")
+        prev_date = (cur - timedelta(days=1)).strftime("%Y%m%d")
+        next_date = (cur + timedelta(days=1)).strftime("%Y%m%d")
     except ValueError:
-        prev_date = date
-        next_date = date
+        prev_date = next_date = date
 
     template = jinja_env.get_template("index.html")
     html = template.render(
-        date=date,
-        formatted_date=formatted_date,
-        meal=meal,
-        dishes=translated_dishes,
-        tray_affiliate_url=tray_affiliate_url,
-        prev_date=prev_date,
-        next_date=next_date
+        date=date, formatted_date=formatted_date, meal=meal,
+        dishes=translated_dishes, tray_affiliate_url=tray_affiliate_url,
+        prev_date=prev_date, next_date=next_date
     )
     return Response(html, headers={"Content-Type": "text/html; charset=utf-8"})
+
+
+async def render_week(url, env):
+    query = parse_qs(url.query)
+    anchor = query.get("date", [None])[0] or get_korean_today()
+    dates = get_week_dates(anchor)
+
+    db = get_db_adapter(env)
+    week_data = []
+    for date in dates:
+        meal = await _get_meal(date, db, env)
+        try:
+            dt = datetime.strptime(date, "%Y%m%d")
+            label = dt.strftime("%a %m/%d")
+        except ValueError:
+            label = date
+
+        if not meal:
+            week_data.append({"date": date, "label": label, "dishes": [], "calories": "", "no_meal": True})
+            continue
+
+        try:
+            allergies = json.loads(meal.get("allergies") or "{}")
+        except Exception:
+            allergies = {}
+
+        dishes_raw = _build_dishes(meal, allergies)
+        dishes = []
+        for dish in dishes_raw:
+            ko = dish["korean_name"]
+            recipe = await translate_and_localize_recipe(ko, db, env=env) if ko else None
+            dishes.append({
+                **dish,
+                "english_name": recipe.get("english_name") if recipe else ko,
+                "recipe_id": recipe.get("id") if recipe else None,
+                "has_recipe": recipe is not None,
+                "image_url": recipe.get("image_url", "") if recipe else "",
+            })
+        week_data.append({
+            "date": date, "label": label,
+            "dishes": dishes, "calories": meal.get("calories",""), "no_meal": False
+        })
+
+    # 이전/다음 주 앵커
+    try:
+        anchor_dt = datetime.strptime(anchor, "%Y%m%d")
+        prev_week = (anchor_dt - timedelta(days=7)).strftime("%Y%m%d")
+        next_week = (anchor_dt + timedelta(days=7)).strftime("%Y%m%d")
+    except ValueError:
+        prev_week = next_week = anchor
+
+    tray_affiliate_url = await get_tray_affiliate_link(db)
+    template = jinja_env.get_template("week.html")
+    html = template.render(
+        week_data=week_data, anchor=anchor,
+        prev_week=prev_week, next_week=next_week,
+        tray_affiliate_url=tray_affiliate_url,
+        week_label=datetime.strptime(dates[0], "%Y%m%d").strftime("Week of %B %d, %Y")
+    )
+    return Response(html, headers={"Content-Type": "text/html; charset=utf-8"})
+
+
+async def render_search(url, env):
+    query = parse_qs(url.query)
+    q = (query.get("q", [None])[0] or "").strip()
+
+    results = []
+    if q:
+        db = get_db_adapter(env)
+        like = f"%{q}%"
+        results = await db.fetch_all(
+            """SELECT id, korean_name, english_name, seo_description, image_url
+               FROM recipes
+               WHERE english_name LIKE ? OR korean_name LIKE ?
+               ORDER BY english_name LIMIT 30""",
+            (like, like)
+        )
+
+    template = jinja_env.get_template("search.html")
+    html = template.render(q=q, results=results)
+    return Response(html, headers={"Content-Type": "text/html; charset=utf-8"})
+
 
 async def render_recipe(recipe_id, env):
     db = get_db_adapter(env)
@@ -119,73 +228,63 @@ async def render_recipe(recipe_id, env):
     if not recipe_row:
         return Response("Recipe not found", status=404)
 
-    ingredients = json.loads(recipe_row["english_ingredients"]) if recipe_row["english_ingredients"] else []
-    substitutes = json.loads(recipe_row["local_substitutes"]) if recipe_row["local_substitutes"] else []
-    instructions = json.loads(recipe_row["instructions"]) if recipe_row["instructions"] else []
-    nutrition = json.loads(recipe_row["nutrition_info"]) if recipe_row["nutrition_info"] else {}
+    ingredients = json.loads(recipe_row["english_ingredients"] or "[]")
+    substitutes = json.loads(recipe_row["local_substitutes"] or "[]")
+    instructions = json.loads(recipe_row["instructions"] or "[]")
+    nutrition = json.loads(recipe_row["nutrition_info"] or "{}")
 
     matched_ingredients = await match_affiliate_links(ingredients, db)
     tray_affiliate_url = await get_tray_affiliate_link(db)
 
+    image = recipe_row.get("image_url") or "https://images.unsplash.com/photo-1541832676-9b763b0239ab?q=80&w=600"
     ld_json = {
         "@context": "https://schema.org",
         "@type": "Recipe",
         "name": recipe_row["english_name"],
-        "image": "https://images.unsplash.com/photo-1541832676-9b763b0239ab?q=80&w=600",
+        "image": image,
         "description": recipe_row["seo_description"],
-        "recipeIngredient": [f"{item['name']} ({item['amount']})" for item in ingredients],
-        "recipeInstructions": [{"@type": "HowToStep", "text": step} for step in instructions],
+        "recipeIngredient": [f"{i['name']} ({i['amount']})" for i in ingredients],
+        "recipeInstructions": [{"@type": "HowToStep", "text": s} for s in instructions],
         "nutrition": {
             "@type": "NutritionInformation",
-            "calories": nutrition.get("calories", "N/A"),
-            "carbohydrateContent": nutrition.get("carbs", "N/A"),
-            "proteinContent": nutrition.get("protein", "N/A"),
-            "fatContent": nutrition.get("fat", "N/A")
+            "calories": nutrition.get("calories","N/A"),
+            "carbohydrateContent": nutrition.get("carbs","N/A"),
+            "proteinContent": nutrition.get("protein","N/A"),
+            "fatContent": nutrition.get("fat","N/A"),
         }
     }
-    
+
     template = jinja_env.get_template("recipe.html")
     html = template.render(
-        recipe=recipe_row,
-        ingredients=matched_ingredients,
-        substitutes=substitutes,
-        instructions=instructions,
-        nutrition=nutrition,
-        tray_affiliate_url=tray_affiliate_url,
+        recipe=recipe_row, ingredients=matched_ingredients,
+        substitutes=substitutes, instructions=instructions,
+        nutrition=nutrition, tray_affiliate_url=tray_affiliate_url,
         ld_json=json.dumps(ld_json)
     )
     return Response(html, headers={"Content-Type": "text/html; charset=utf-8"})
+
 
 async def render_sitemap(host, env):
     db = get_db_adapter(env)
     recipes = await db.fetch_all("SELECT id FROM recipes")
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-    xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
-    xml_content += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-    xml_content += f'  <url>\n    <loc>{host}/</loc>\n    <lastmod>{today}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n'
+    xml  = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    xml += f'  <url><loc>{host}/</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>\n'
+    xml += f'  <url><loc>{host}/week</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>\n'
     for r in recipes:
-        xml_content += f'  <url>\n    <loc>{host}/recipe/{r["id"]}</loc>\n    <lastmod>{today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>\n'
-    xml_content += '</urlset>'
-
-    return Response(xml_content, headers={"Content-Type": "application/xml; charset=utf-8"})
+        xml += f'  <url><loc>{host}/recipe/{r["id"]}</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\n'
+    xml += '</urlset>'
+    return Response(xml, headers={"Content-Type": "application/xml; charset=utf-8"})
 
 
 async def render_robots(host):
-    txt = f"""User-agent: *
-Allow: /
-Disallow:
-
-Sitemap: {host}/sitemap.xml
-"""
+    txt = f"User-agent: *\nAllow: /\nDisallow:\n\nSitemap: {host}/sitemap.xml\n"
     return Response(txt, headers={"Content-Type": "text/plain; charset=utf-8"})
 
 
 async def handle_review_post(request, recipe_id, env):
-    """후기 등록 (IP당 하루 1회 제한)"""
     db = get_db_adapter(env)
-
-    # IP 기반 스팸 방지 (KV 없이 D1로 간단 구현: 오늘 날짜 + IP 조합)
     ip = request.headers.get("cf-connecting-ip", "unknown")
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     existing = await db.fetch_one(
@@ -193,31 +292,21 @@ async def handle_review_post(request, recipe_id, env):
         (recipe_id, ip, today)
     )
     if existing:
-        return Response(
-            json.dumps({"error": "You have already submitted a review today."}),
-            status=429, headers={"Content-Type": "application/json"}
-        )
-
+        return Response(json.dumps({"error": "Already reviewed today."}), status=429,
+                        headers={"Content-Type": "application/json"})
     try:
         body = await request.json()
     except Exception:
         return Response(json.dumps({"error": "Invalid JSON"}), status=400,
                         headers={"Content-Type": "application/json"})
-
     rating = body.get("rating")
-    comment = (body.get("comment") or "").strip()[:500]  # 최대 500자
-
+    comment = (body.get("comment") or "").strip()[:500]
     if not isinstance(rating, int) or not (1 <= rating <= 5):
         return Response(json.dumps({"error": "Rating must be 1-5"}), status=400,
                         headers={"Content-Type": "application/json"})
-
-    # 빈 comment는 허용, 최소 3자 이상이면 저장
     if comment and len(comment) < 3:
         comment = ""
-
-    # country 필드에 IP 저장 (스팸 방지용, 실제 국가는 cf-ipcountry 헤더 활용)
     country = request.headers.get("cf-ipcountry", "")
-
     await db.execute(
         "INSERT INTO reviews (recipe_id, rating, comment, country) VALUES (?, ?, ?, ?)",
         (recipe_id, rating, comment, f"{ip}|{country}")
@@ -226,7 +315,6 @@ async def handle_review_post(request, recipe_id, env):
 
 
 async def get_reviews(recipe_id, env):
-    """후기 목록 + 평균 별점 반환"""
     db = get_db_adapter(env)
     reviews = await db.fetch_all(
         "SELECT rating, comment, country, created_at FROM reviews WHERE recipe_id=? ORDER BY id DESC LIMIT 20",
@@ -238,18 +326,12 @@ async def get_reviews(recipe_id, env):
     )
     avg = round(avg_row["avg"] or 0, 1) if avg_row else 0
     cnt = avg_row["cnt"] if avg_row else 0
-
-    # IP 정보 제거하고 국가 코드만 노출
     clean = []
     for r in reviews:
-        country_raw = r.get("country", "")
-        country_code = country_raw.split("|")[1] if "|" in country_raw else country_raw
-        clean.append({
-            "rating": r["rating"],
-            "comment": r["comment"] or "",
-            "country": country_code,
-            "created_at": (r["created_at"] or "")[:10],
-        })
+        raw = r.get("country","")
+        cc = raw.split("|")[1] if "|" in raw else raw
+        clean.append({"rating": r["rating"], "comment": r["comment"] or "",
+                      "country": cc, "created_at": (r["created_at"] or "")[:10]})
     return {"avg": avg, "count": cnt, "reviews": clean}
 
 
@@ -258,14 +340,17 @@ class Default(WorkerEntrypoint):
         env = getattr(self, 'env', None)
         url = urlparse(request.url)
         host = f"{url.scheme}://{url.netloc}"
-
         path = url.path
-        if path == "/" or path == "":
+
+        if path in ("/", ""):
             return await render_index(url, env)
+        elif path == "/week":
+            return await render_week(url, env)
+        elif path == "/search":
+            return await render_search(url, env)
         elif path.startswith("/recipe/"):
             try:
-                recipe_id = int(path.split("/")[-1])
-                return await render_recipe(recipe_id, env)
+                return await render_recipe(int(path.split("/")[-1]), env)
             except ValueError:
                 return Response("Invalid recipe ID", status=400)
         elif path == "/sitemap.xml":

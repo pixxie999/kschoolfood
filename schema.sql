@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS meal_trays (
     side1 TEXT,
     side2 TEXT,
     side3 TEXT,
-    calories TEXT
+    calories TEXT,
+    allergies TEXT DEFAULT '{}'
 );
 
 -- Recipe 테이블 정의

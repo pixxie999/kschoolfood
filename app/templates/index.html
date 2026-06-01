@@ -39,6 +39,11 @@
                         <span class="text-[10px] font-bold text-orange-600 uppercase">{{ dish.role }}</span>
                         <h3 class="font-outfit font-bold text-base line-clamp-2 mt-1">{{ dish.english_name }}</h3>
                         <p class="text-xs text-gray-500 line-clamp-1 mt-0.5">{{ dish.korean_name }}</p>
+                        {% if dish.allergies %}
+                        <div class="flex flex-wrap gap-1 mt-1">
+                            {% for a in dish.allergies[:3] %}<span class="text-[9px] bg-red-50 text-red-500 border border-red-100 px-1.5 py-0.5 rounded-full">{{ a }}</span>{% endfor %}
+                        </div>
+                        {% endif %}
                     </div>
                     <div class="text-right">
                         <span class="text-[10px] bg-orange-100 text-orange-800 font-bold px-2 py-0.5 rounded-full">View Recipe &rarr;</span>

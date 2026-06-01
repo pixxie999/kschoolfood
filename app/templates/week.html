@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Weekly School Lunch Menu - K-School Food{% endblock %}
+{% block meta_desc %}Browse this week's Korean school lunch menu with English translations, recipes, and nutrition info.{% endblock %}
+{% block canonical %}https://kschoolfood.com/week{% endblock %}
+{% block og_title %}This Week's Korean School Lunch Menu | K-School Food{% endblock %}
+{% block og_desc %}See the full weekly school lunch schedule translated to English with recipes and local ingredient substitutes.{% endblock %}
+
+{% block content %}
+<div class="space-y-6 animate-fade-in">
+
+    <!-- Header -->
+    <div class="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <span class="text-xs font-bold text-orange-500 uppercase tracking-widest">Weekly View</span>
+            <h1 class="text-2xl md:text-3xl font-outfit font-extrabold text-gray-900 mt-1">{{ week_label }}</h1>
+        </div>
+        <div class="flex items-center space-x-2">
+            <a href="/week?date={{ prev_week }}" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-xl transition-colors">
+                &larr; Prev Week
+            </a>
+            <a href="/week" class="px-4 py-2 bg-orange-100 hover:bg-orange-200 text-orange-700 text-sm font-semibold rounded-xl transition-colors">
+                This Week
+            </a>
+            <a href="/week?date={{ next_week }}" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-xl transition-colors">
+                Next Week &rarr;
+            </a>
+        </div>
+    </div>
+
+    <!-- 5일 카드 그리드 -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        {% for day in week_data %}
+        <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+            <!-- 날짜 헤더 -->
+            <div class="{% if day.no_meal %}bg-gray-100{% else %}bg-gradient-to-r from-orange-500 to-amber-500{% endif %} px-4 py-3">
+                <p class="font-outfit font-extrabold text-sm {% if day.no_meal %}text-gray-400{% else %}text-white{% endif %}">
+                    {{ day.label }}
+                </p>
+                {% if not day.no_meal and day.calories %}
+                <p class="text-[10px] {% if day.no_meal %}text-gray-400{% else %}text-orange-100{% endif %} mt-0.5">
+                    🔋 {{ day.calories }}
+                </p>
+                {% endif %}
+            </div>
+
+            <!-- 메뉴 목록 -->
+            <div class="p-3 flex-1 space-y-1.5">
+                {% if day.no_meal %}
+                <p class="text-xs text-gray-400 text-center py-4">No school lunch<br><span class="text-lg">🏖️</span></p>
+                {% else %}
+                    {% for dish in day.dishes %}
+                    <div class="{% if dish.has_recipe %}hover:bg-orange-50{% endif %} rounded-lg transition-colors">
+                        {% if dish.has_recipe %}
+                        <a href="/recipe/{{ dish.recipe_id }}" class="block p-2">
+                        {% else %}
+                        <div class="block p-2 opacity-60">
+                        {% endif %}
+                            <!-- 이미지 썸네일 -->
+                            {% if dish.image_url and dish.has_recipe %}
+                            <img src="{{ dish.image_url }}" alt="{{ dish.english_name }}"
+                                 class="w-full h-20 object-cover rounded-lg mb-2"
+                                 loading="lazy" onerror="this.style.display='none'">
+                            {% endif %}
+                            <p class="text-[9px] font-bold text-orange-500 uppercase">{{ dish.role }}</p>
+                            <p class="text-xs font-semibold text-gray-800 line-clamp-1 mt-0.5">{{ dish.english_name }}</p>
+                            <p class="text-[10px] text-gray-400 line-clamp-1">{{ dish.korean_name }}</p>
+                            {% if dish.allergies %}
+                            <div class="flex flex-wrap gap-0.5 mt-1">
+                                {% for a in dish.allergies[:2] %}
+                                <span class="text-[8px] bg-red-50 text-red-400 border border-red-100 px-1 py-0.5 rounded-full">{{ a }}</span>
+                                {% endfor %}
+                                {% if dish.allergies|length > 2 %}
+                                <span class="text-[8px] text-gray-400">+{{ dish.allergies|length - 2 }}</span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        {% if dish.has_recipe %}</a>{% else %}</div>{% endif %}
+                    </div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+
+            <!-- 일별 링크 -->
+            {% if not day.no_meal %}
+            <div class="px-3 pb-3">
+                <a href="/?date={{ day.date }}" class="block text-center text-[10px] font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 rounded-lg py-1.5 transition-colors">
+                    View Full Tray &rarr;
+                </a>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- 제휴 배너 -->
+    <div class="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-100 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+        <div>
+            <h3 class="text-base font-outfit font-bold text-gray-900">Experience Korean School Lunch at Home</h3>
+            <p class="text-xs text-gray-600 mt-0.5">Get an authentic 5-compartment stainless steel meal tray.</p>
+        </div>
+        <a href="{{ tray_affiliate_url }}" target="_blank" rel="noopener noreferrer"
+           class="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all shadow-md shrink-0">
+            Get 5-Compartment Tray 🛒
+        </a>
+    </div>
+
+</div>
+{% endblock %}

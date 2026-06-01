@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}{% if q %}Search "{{ q }}" - {% endif %}Recipe Search - K-School Food{% endblock %}
+{% block meta_desc %}Search Korean school lunch recipes translated to English with ingredients and cooking instructions.{% endblock %}
+{% block search_q %}{{ q }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6 animate-fade-in">
+
+    <!-- 검색 헤더 -->
+    <div class="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+        <h1 class="text-2xl font-outfit font-extrabold text-gray-900">
+            {% if q %}
+                Search results for <span class="text-orange-500">"{{ q }}"</span>
+            {% else %}
+                Search Recipes
+            {% endif %}
+        </h1>
+        {% if results %}
+        <p class="text-sm text-gray-500 mt-1">{{ results|length }} recipe{{ 's' if results|length != 1 }} found</p>
+        {% endif %}
+        <!-- 큰 검색바 -->
+        <form action="/search" method="get" class="mt-4">
+            <div class="flex gap-2">
+                <input type="search" name="q" value="{{ q }}"
+                    placeholder="e.g. kimchi, doenjang, bulgogi…"
+                    autofocus
+                    class="flex-1 text-sm border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-orange-300">
+                <button type="submit"
+                    class="bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm px-6 py-3 rounded-xl transition-colors">
+                    Search
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 결과 없음 -->
+    {% if q and not results %}
+    <div class="text-center py-16 text-gray-400">
+        <p class="text-5xl mb-4">🍽️</p>
+        <p class="text-lg font-semibold">No recipes found for "{{ q }}"</p>
+        <p class="text-sm mt-2">Try searching in Korean (e.g. 불고기) or a shorter keyword.</p>
+    </div>
+
+    <!-- 결과 목록 -->
+    {% elif results %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for recipe in results %}
+        <a href="/recipe/{{ recipe.id }}"
+           class="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col">
+            {% if recipe.image_url %}
+            <img src="{{ recipe.image_url }}" alt="{{ recipe.english_name }}"
+                 class="w-full h-36 object-cover"
+                 loading="lazy" onerror="this.style.display='none'">
+            {% else %}
+            <div class="w-full h-36 bg-gradient-to-br from-orange-50 to-amber-50 flex items-center justify-center">
+                <span class="text-4xl">🍱</span>
+            </div>
+            {% endif %}
+            <div class="p-4 flex-1 flex flex-col justify-between">
+                <div>
+                    <h3 class="font-outfit font-bold text-gray-900 leading-tight line-clamp-2">
+                        {{ recipe.english_name }}
+                    </h3>
+                    <p class="text-xs text-gray-500 mt-0.5">{{ recipe.korean_name }}</p>
+                    {% if recipe.seo_description %}
+                    <p class="text-xs text-gray-600 mt-2 line-clamp-2 leading-relaxed">
+                        {{ recipe.seo_description }}
+                    </p>
+                    {% endif %}
+                </div>
+                <div class="mt-3 text-right">
+                    <span class="text-[10px] bg-orange-100 text-orange-700 font-bold px-2.5 py-1 rounded-full">
+                        View Recipe &rarr;
+                    </span>
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+
+    <!-- 검색 전 초기 상태 -->
+    {% else %}
+    <div class="text-center py-12 text-gray-400">
+        <p class="text-5xl mb-4">🔍</p>
+        <p class="text-base font-semibold text-gray-500">Search Korean school lunch recipes</p>
+        <p class="text-sm mt-2">Try: <a href="/search?q=kimchi" class="text-orange-500 hover:underline">kimchi</a>,
+            <a href="/search?q=soup" class="text-orange-500 hover:underline">soup</a>,
+            <a href="/search?q=rice" class="text-orange-500 hover:underline">rice</a>,
+            <a href="/search?q=불고기" class="text-orange-500 hover:underline">불고기</a>
+        </p>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
