@@ -22,28 +22,7 @@ D1_DATABASE_ID = os.environ["D1_DATABASE_ID"]
 
 CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
-JSON_FORMAT_PROMPT = """
-You MUST return ONLY valid JSON in this exact structure:
-{
-  "english_name": "Descriptive English name",
-  "english_ingredients": [
-    {"name": "Ingredient name", "amount": "Amount"}
-  ],
-  "local_substitutes": [
-    {"original": "Korean ingredient", "substitute": "Local substitute", "reason": "Reason"}
-  ],
-  "instructions": [
-    "Step 1", "Step 2"
-  ],
-  "seo_description": "Short SEO description under 160 chars",
-  "nutrition_info": {
-    "calories": "350 kcal",
-    "carbs": "40g",
-    "protein": "15g",
-    "fat": "10g"
-  }
-}
-"""
+JSON_FORMAT_PROMPT = """Return ONLY JSON: {"english_name":"...","english_ingredients":[{"name":"...","amount":"..."}],"local_substitutes":[{"original":"...","substitute":"...","reason":"..."}],"instructions":["step1","step2"],"seo_description":"under 160 chars","nutrition_info":{"calories":"kcal","carbs":"g","protein":"g","fat":"g"}}"""
 
 
 def d1_query(sql: str, params: list = None) -> dict:
@@ -149,8 +128,8 @@ def call_claude(prompt: str) -> dict:
     }
     payload = {
         "model": CLAUDE_MODEL,
-        "max_tokens": 1024,
-        "system": "You are a professional chef and SEO specialist. Translate Korean school lunch dishes into English recipes for a global audience. Be concise. Return only valid JSON, no extra text.\n" + JSON_FORMAT_PROMPT,
+        "max_tokens": 600,
+        "system": "Korean→English recipe translator. Return only valid JSON, no extra text. " + JSON_FORMAT_PROMPT,
         "messages": [{"role": "user", "content": prompt}],
     }
     r = requests.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload, timeout=30)
