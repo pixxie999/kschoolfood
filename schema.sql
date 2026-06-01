@@ -23,6 +23,17 @@ CREATE TABLE IF NOT EXISTS recipes (
     image_url TEXT DEFAULT ''
 );
 
+-- Reviews 테이블 정의
+CREATE TABLE IF NOT EXISTS reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recipe_id INTEGER NOT NULL,
+    rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
+    comment TEXT,
+    country TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (recipe_id) REFERENCES recipes(id)
+);
+
 -- AffiliateMapping 테이블 정의
 CREATE TABLE IF NOT EXISTS affiliate_mappings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

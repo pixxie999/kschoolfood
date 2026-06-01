@@ -180,6 +180,79 @@ Sitemap: {host}/sitemap.xml
 """
     return Response(txt, headers={"Content-Type": "text/plain; charset=utf-8"})
 
+
+async def handle_review_post(request, recipe_id, env):
+    """후기 등록 (IP당 하루 1회 제한)"""
+    db = get_db_adapter(env)
+
+    # IP 기반 스팸 방지 (KV 없이 D1로 간단 구현: 오늘 날짜 + IP 조합)
+    ip = request.headers.get("cf-connecting-ip", "unknown")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    existing = await db.fetch_one(
+        "SELECT id FROM reviews WHERE recipe_id=? AND country=? AND DATE(created_at)=?",
+        (recipe_id, ip, today)
+    )
+    if existing:
+        return Response(
+            json.dumps({"error": "You have already submitted a review today."}),
+            status=429, headers={"Content-Type": "application/json"}
+        )
+
+    try:
+        body = await request.json()
+    except Exception:
+        return Response(json.dumps({"error": "Invalid JSON"}), status=400,
+                        headers={"Content-Type": "application/json"})
+
+    rating = body.get("rating")
+    comment = (body.get("comment") or "").strip()[:500]  # 최대 500자
+
+    if not isinstance(rating, int) or not (1 <= rating <= 5):
+        return Response(json.dumps({"error": "Rating must be 1-5"}), status=400,
+                        headers={"Content-Type": "application/json"})
+
+    # 빈 comment는 허용, 최소 3자 이상이면 저장
+    if comment and len(comment) < 3:
+        comment = ""
+
+    # country 필드에 IP 저장 (스팸 방지용, 실제 국가는 cf-ipcountry 헤더 활용)
+    country = request.headers.get("cf-ipcountry", "")
+
+    await db.execute(
+        "INSERT INTO reviews (recipe_id, rating, comment, country) VALUES (?, ?, ?, ?)",
+        (recipe_id, rating, comment, f"{ip}|{country}")
+    )
+    return Response(json.dumps({"ok": True}), headers={"Content-Type": "application/json"})
+
+
+async def get_reviews(recipe_id, env):
+    """후기 목록 + 평균 별점 반환"""
+    db = get_db_adapter(env)
+    reviews = await db.fetch_all(
+        "SELECT rating, comment, country, created_at FROM reviews WHERE recipe_id=? ORDER BY id DESC LIMIT 20",
+        (recipe_id,)
+    )
+    avg_row = await db.fetch_one(
+        "SELECT AVG(rating) as avg, COUNT(*) as cnt FROM reviews WHERE recipe_id=?",
+        (recipe_id,)
+    )
+    avg = round(avg_row["avg"] or 0, 1) if avg_row else 0
+    cnt = avg_row["cnt"] if avg_row else 0
+
+    # IP 정보 제거하고 국가 코드만 노출
+    clean = []
+    for r in reviews:
+        country_raw = r.get("country", "")
+        country_code = country_raw.split("|")[1] if "|" in country_raw else country_raw
+        clean.append({
+            "rating": r["rating"],
+            "comment": r["comment"] or "",
+            "country": country_code,
+            "created_at": (r["created_at"] or "")[:10],
+        })
+    return {"avg": avg, "count": cnt, "reviews": clean}
+
+
 class Default(WorkerEntrypoint):
     async def on_fetch(self, request):
         env = getattr(self, 'env', None)
@@ -199,5 +272,15 @@ class Default(WorkerEntrypoint):
             return await render_sitemap(host, env)
         elif path == "/robots.txt":
             return await render_robots(host)
+        elif path.startswith("/api/reviews/"):
+            try:
+                recipe_id = int(path.split("/")[-1])
+            except ValueError:
+                return Response("Invalid ID", status=400)
+            if request.method == "POST":
+                return await handle_review_post(request, recipe_id, env)
+            else:
+                data = await get_reviews(recipe_id, env)
+                return Response(json.dumps(data), headers={"Content-Type": "application/json"})
         else:
             return Response("Not Found", status=404)

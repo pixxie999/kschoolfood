@@ -158,7 +158,7 @@
                 </ol>
             </div>
 
-            <!-- Monetization Banner - School Tray Purchase Promotion (Repeat on Detail Page) -->
+            <!-- Monetization Banner -->
             <div class="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-100 rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0 sm:space-x-6">
                 <div>
                     <h3 class="text-base font-outfit font-bold text-gray-900">Serve in a Korean School Tray</h3>
@@ -168,9 +168,162 @@
                     Get 5-Compartment Tray 🛒
                 </a>
             </div>
+
+            <!-- ⭐ Reviews Section -->
+            <div class="bg-white border border-gray-100 rounded-2xl p-6 md:p-8 shadow-sm" id="reviews-section">
+                <h3 class="font-outfit font-bold text-xl text-gray-900 mb-2 flex items-center space-x-2">
+                    <span>⭐</span><span>Community Reviews</span>
+                </h3>
+                <!-- 평균 별점 요약 -->
+                <div id="rating-summary" class="mb-6 flex items-center space-x-3">
+                    <span id="avg-score" class="text-4xl font-extrabold text-orange-500">–</span>
+                    <div>
+                        <div id="avg-stars" class="text-xl text-orange-400"></div>
+                        <p id="review-count" class="text-xs text-gray-500 mt-0.5">No reviews yet</p>
+                    </div>
+                </div>
+
+                <!-- 후기 작성 폼 -->
+                <div class="bg-gray-50 rounded-xl p-4 mb-6" id="review-form-wrap">
+                    <p class="text-sm font-semibold text-gray-700 mb-3">Have you tried this dish? Leave a review!</p>
+                    <div class="flex space-x-1 mb-3" id="star-input">
+                        {% for i in range(1, 6) %}
+                        <button type="button" data-v="{{ i }}"
+                            class="star-btn text-2xl text-gray-300 hover:text-yellow-400 transition-colors">★</button>
+                        {% endfor %}
+                    </div>
+                    <textarea id="review-comment" rows="2" maxlength="500"
+                        placeholder="Share your thoughts (optional, max 500 chars)..."
+                        class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-300"></textarea>
+                    <div class="flex items-center justify-between mt-2">
+                        <span id="review-msg" class="text-xs text-gray-400"></span>
+                        <button id="submit-review"
+                            class="bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs px-5 py-2 rounded-lg transition-colors disabled:opacity-40"
+                            disabled>Submit</button>
+                    </div>
+                </div>
+
+                <!-- 후기 목록 -->
+                <div id="reviews-list" class="space-y-4"></div>
+            </div>
         </div>
-
     </div>
-
 </div>
+
+<script>
+(function(){
+    const recipeId = {{ recipe.id }};
+    const API = `/api/reviews/${recipeId}`;
+    let selectedRating = 0;
+
+    // 별점 렌더링 헬퍼
+    function starsHtml(avg) {
+        let s = '';
+        for (let i = 1; i <= 5; i++) {
+            if (i <= Math.round(avg)) s += '<span class="text-yellow-400">★</span>';
+            else s += '<span class="text-gray-300">★</span>';
+        }
+        return s;
+    }
+
+    // 국가 코드 → 국기 이모지
+    function flagEmoji(code) {
+        if (!code || code.length !== 2) return '🌍';
+        return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E0 - 65 + c.charCodeAt(0)));
+    }
+
+    // 후기 목록 불러오기
+    async function loadReviews() {
+        try {
+            const res = await fetch(API);
+            const data = await res.json();
+            // 평균 별점 업데이트
+            if (data.count > 0) {
+                document.getElementById('avg-score').textContent = data.avg.toFixed(1);
+                document.getElementById('avg-stars').innerHTML = starsHtml(data.avg);
+                document.getElementById('review-count').textContent = `${data.count} review${data.count > 1 ? 's' : ''}`;
+            }
+            // 후기 목록
+            const list = document.getElementById('reviews-list');
+            if (data.reviews.length === 0) {
+                list.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">Be the first to review this dish!</p>';
+                return;
+            }
+            list.innerHTML = data.reviews.map(r => `
+                <div class="border-b border-gray-100 pb-4 last:border-0">
+                    <div class="flex items-center justify-between mb-1">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-yellow-400 text-sm">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</span>
+                            <span class="text-sm">${flagEmoji(r.country)}</span>
+                        </div>
+                        <span class="text-[11px] text-gray-400">${r.created_at}</span>
+                    </div>
+                    ${r.comment ? `<p class="text-sm text-gray-700 leading-relaxed">${r.comment.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>` : ''}
+                </div>
+            `).join('');
+        } catch(e) { console.error(e); }
+    }
+
+    // 별점 선택 인터랙션
+    document.querySelectorAll('.star-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            selectedRating = parseInt(this.dataset.v);
+            document.querySelectorAll('.star-btn').forEach((b, i) => {
+                b.classList.toggle('text-yellow-400', i < selectedRating);
+                b.classList.toggle('text-gray-300', i >= selectedRating);
+            });
+            document.getElementById('submit-review').disabled = false;
+        });
+        btn.addEventListener('mouseenter', function() {
+            const v = parseInt(this.dataset.v);
+            document.querySelectorAll('.star-btn').forEach((b, i) => {
+                b.classList.toggle('text-yellow-300', i < v);
+            });
+        });
+        btn.addEventListener('mouseleave', function() {
+            document.querySelectorAll('.star-btn').forEach((b, i) => {
+                b.classList.toggle('text-yellow-400', i < selectedRating);
+                b.classList.remove('text-yellow-300');
+            });
+        });
+    });
+
+    // 후기 제출
+    document.getElementById('submit-review').addEventListener('click', async function() {
+        if (!selectedRating) return;
+        this.disabled = true;
+        const comment = document.getElementById('review-comment').value.trim();
+        const msg = document.getElementById('review-msg');
+        try {
+            const res = await fetch(API, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({rating: selectedRating, comment})
+            });
+            const data = await res.json();
+            if (res.ok) {
+                msg.textContent = '✅ Thank you for your review!';
+                msg.className = 'text-xs text-green-600';
+                document.getElementById('review-form-wrap').innerHTML =
+                    '<p class="text-sm text-green-600 text-center py-2">✅ Your review has been submitted!</p>';
+                loadReviews();
+            } else if (res.status === 429) {
+                msg.textContent = '⏳ You already reviewed this dish today.';
+                msg.className = 'text-xs text-orange-500';
+                this.disabled = false;
+            } else {
+                msg.textContent = '❌ Failed to submit. Please try again.';
+                msg.className = 'text-xs text-red-500';
+                this.disabled = false;
+            }
+        } catch(e) {
+            msg.textContent = '❌ Network error. Please try again.';
+            msg.className = 'text-xs text-red-500';
+            this.disabled = false;
+        }
+    });
+
+    loadReviews();
+})();
+</script>
 {% endblock %}
