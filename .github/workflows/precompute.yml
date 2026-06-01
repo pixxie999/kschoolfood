@@ -1,0 +1,31 @@
+name: Precompute Recipes
+
+on:
+  schedule:
+    - cron: '0 15 * * *'  # 매일 KST 자정 (UTC 15:00)
+  workflow_dispatch:
+
+jobs:
+  precompute:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run precompute script
+        run: python scripts/precompute_recipes.py
+        env:
+          NEIS_API_KEY: ${{ secrets.NEIS_API_KEY }}
+          OFFICE_CODE: K10
+          SCHOOL_CODE: '7801106'
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          COOKRCP01_API_KEY: ${{ secrets.COOKRCP01_API_KEY }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}

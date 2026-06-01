@@ -5,7 +5,6 @@ import httpx
 from typing import Dict, Any, Optional
 from app.config import settings
 from app.db_adapter import get_db_adapter
-from app.services.recipe_api import search_recipe_from_public
 
 logger = logging.getLogger(__name__)
 
@@ -77,10 +76,8 @@ async def call_claude_api(prompt: str, api_key: str) -> Optional[Dict[str, Any]]
 
 async def translate_and_localize_recipe(korean_name: str, db_adapter=None, env=None) -> Optional[Dict[str, Any]]:
     """
-    우선순위:
-    1. D1 DB 캐시
-    2. 식품안전나라 COOKRCP01 공공 레시피 (한국어 재료·조리법 확보 후 Claude로 번역)
-    3. Claude Haiku 단독 생성 (fallback)
+    D1 DB 캐시에서만 레시피를 조회합니다.
+    레시피 번역은 GitHub Actions (precompute.yml)에서 사전 처리됩니다.
     """
     if not korean_name or korean_name.strip() in ["", "Rice", "Soup", "Side 1", "Side 2", "Side 3"]:
         return None
@@ -88,7 +85,6 @@ async def translate_and_localize_recipe(korean_name: str, db_adapter=None, env=N
     if db_adapter is None:
         db_adapter = get_db_adapter()
 
-    # 1. DB 캐시
     try:
         cached = await db_adapter.fetch_one(
             "SELECT * FROM recipes WHERE korean_name = ?", (korean_name,)
@@ -109,45 +105,7 @@ async def translate_and_localize_recipe(korean_name: str, db_adapter=None, env=N
     except Exception as e:
         logger.error(f"DB 캐시 조회 오류: {e}")
 
-    anthropic_key = _get_setting("ANTHROPIC_API_KEY", env) or settings.ANTHROPIC_API_KEY
-
-    # 2. 공공 레시피 API 조회 → Claude로 번역
-    public_recipe = await search_recipe_from_public(korean_name, env=env)
-    if public_recipe:
-        logger.info(f"COOKRCP01 히트: {korean_name}")
-        prompt = (
-            f"Korean dish: '{korean_name}'\n"
-            f"Category: {public_recipe.get('category', '')}\n"
-            f"Cooking method: {public_recipe.get('cooking_method', '')}\n"
-            f"Ingredients (Korean): {public_recipe.get('ingredients_raw', '')}\n"
-            f"Instructions (Korean): {chr(10).join(public_recipe.get('instructions_ko', []))}\n\n"
-            "Translate the above Korean recipe to English. "
-            "Suggest Western substitutes for hard-to-find Korean ingredients."
-        )
-        result_dict = None
-        try:
-            result_dict = await call_claude_api(prompt, anthropic_key)
-        except Exception as e:
-            logger.error(f"Claude 번역 오류 (공공 레시피): {e}")
-
-        if result_dict:
-            # 공공 레시피의 영양정보·이미지로 보강
-            if public_recipe.get("nutrition"):
-                result_dict["nutrition_info"] = public_recipe["nutrition"]
-            result_dict["image_url"] = public_recipe.get("image_url", "")
-            return await _save_and_return(korean_name, result_dict, db_adapter)
-
-    # 3. Claude 단독 생성 (fallback)
-    logger.info(f"Claude 단독 생성 (fallback): {korean_name}")
-    prompt = f"Translate and create a global localized recipe for Korean school lunch dish: '{korean_name}'"
-    try:
-        result_dict = await call_claude_api(prompt, anthropic_key)
-        if result_dict:
-            result_dict["image_url"] = ""
-            return await _save_and_return(korean_name, result_dict, db_adapter)
-    except Exception as e:
-        logger.error(f"Claude 단독 생성 오류: {e}")
-
+    logger.info(f"레시피 미캐시 (사전 처리 대기 중): {korean_name}")
     return None
 
 
