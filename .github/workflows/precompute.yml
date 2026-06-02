@@ -16,9 +16,10 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests cryptography
 
-      - name: Run precompute script
+      # 1단계: 신규 메뉴 번역 후 D1 저장
+      - name: Translate & save recipes to D1
         run: python scripts/precompute_recipes.py
         env:
           NEIS_API_KEY: ${{ secrets.NEIS_API_KEY }}
@@ -31,11 +32,22 @@ jobs:
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
 
-      - name: Sync images from Google Sheet
-        run: python scripts/sync_images.py
-        continue-on-error: true
+      # 2단계: D1 레시피 전체 → 구글 시트로 내보내기 (없는 행만 추가)
+      - name: Export recipes to Google Sheet
+        run: python scripts/export_to_sheet.py
         env:
-          SHEET_CSV_URL: ${{ secrets.SHEET_CSV_URL }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+
+      # 3단계: 구글 시트에서 수정된 image_url → D1 반영
+      - name: Sync image URLs from Google Sheet to D1
+        run: python scripts/sync_images.py
+        env:
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
           CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
