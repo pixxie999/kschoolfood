@@ -16,7 +16,7 @@ import requests
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-SHEET_CSV_URL  = os.environ["SHEET_CSV_URL"]       # 구글 시트 CSV 퍼블리시 URL
+SHEET_CSV_URL  = os.environ.get("SHEET_CSV_URL", "")  # 구글 시트 CSV 퍼블리시 URL
 CF_ACCOUNT_ID  = os.environ["CF_ACCOUNT_ID"]
 CF_API_TOKEN   = os.environ["CF_API_TOKEN"]
 D1_DATABASE_ID = os.environ["D1_DATABASE_ID"]
@@ -57,6 +57,9 @@ def get_existing_names() -> set:
 
 
 def main():
+    if not SHEET_CSV_URL:
+        logger.info("SHEET_CSV_URL 미설정 — 건너뜀")
+        return
     logger.info("구글 시트에서 이미지 URL 읽는 중...")
     rows = fetch_sheet()
     logger.info(f"시트 항목 수: {len(rows)}")

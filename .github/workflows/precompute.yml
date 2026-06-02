@@ -32,8 +32,8 @@ jobs:
           D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
 
       - name: Sync images from Google Sheet
-        if: ${{ secrets.SHEET_CSV_URL != '' }}
         run: python scripts/sync_images.py
+        continue-on-error: true
         env:
           SHEET_CSV_URL: ${{ secrets.SHEET_CSV_URL }}
           CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
