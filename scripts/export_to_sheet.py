@@ -87,7 +87,7 @@ def sheets_append(token: str, rows: list[list]):
     r = requests.post(
         f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}/values/{SHEET_NAME}!A1:append",
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-        params={"valueInputOption": "RAW", "insertDataOption": "INSERT_ROWS"},
+        params={"valueInputOption": "USER_ENTERED", "insertDataOption": "INSERT_ROWS"},
         json={"values": rows},
         timeout=15,
     )
@@ -101,8 +101,21 @@ def sheets_update_cell(token: str, row: int, col: int, value: str):
     r = requests.put(
         f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}/values/{range_}",
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-        params={"valueInputOption": "RAW"},
+        params={"valueInputOption": "USER_ENTERED"},
         json={"values": [[value]]},
+        timeout=15,
+    )
+    r.raise_for_status()
+
+
+def sheets_batch_update(token: str, updates: list[dict]):
+    """여러 셀 한번에 업데이트"""
+    if not updates:
+        return
+    r = requests.post(
+        f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}/values:batchUpdate",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        json={"valueInputOption": "USER_ENTERED", "data": updates},
         timeout=15,
     )
     r.raise_for_status()
@@ -133,7 +146,7 @@ def get_all_recipes() -> list[dict]:
 
 # ── 메인 ───────────────────────────────────────────────────────────────────
 
-HEADERS = ["korean_name", "image_url", "english_name", "memo"]
+HEADERS = ["korean_name", "image_url", "미리보기", "english_name", "memo"]
 
 def main():
     global SHEET_NAME
@@ -164,34 +177,76 @@ def main():
     logger.info(f"D1 레시피 수: {len(recipes)}, 시트 기존 행: {len(sheet_names)}")
 
     new_rows = []
+    preview_updates = []  # 기존 행 중 미리보기 없는 것
     updated = 0
+
     for recipe in recipes:
         name = recipe["korean_name"]
         if name in sheet_names:
-            # 이미 시트에 있음 → image_url 컬럼(B)만 비어 있으면 D1 값으로 채우기
             row_idx = sheet_names[name]
             sheet_row = values[row_idx - 1] if row_idx - 1 < len(values) else []
-            sheet_img = sheet_row[1] if len(sheet_row) > 1 else ""
+            sheet_img     = sheet_row[1] if len(sheet_row) > 1 else ""
+            sheet_preview = sheet_row[2] if len(sheet_row) > 2 else ""
+
+            # B열 비어 있으면 D1 이미지로 채우기
             if not sheet_img and recipe.get("image_url"):
                 sheets_update_cell(token, row_idx, 2, recipe["image_url"])
                 logger.info(f"이미지 채움: {name}")
                 updated += 1
-                time.sleep(0.2)
+                time.sleep(0.15)
+                sheet_img = recipe["image_url"]
+
+            # C열(미리보기) 비어 있고 이미지 있으면 IMAGE 수식 추가
+            if not sheet_preview and sheet_img:
+                preview_updates.append({
+                    "range": f"{SHEET_NAME}!C{row_idx}",
+                    "values": [[f'=IMAGE(B{row_idx})']],
+                })
         else:
-            # 새 레시피 → 추가 대기열
+            img = recipe.get("image_url", "")
             new_rows.append([
                 name,
-                recipe.get("image_url", ""),
+                img,
+                f'=IMAGE(B{len(values) + len(new_rows) + 1})' if img else "",
                 recipe.get("english_name", ""),
-                "",   # memo 빈칸 (사용자 작성용)
+                "",  # memo
             ])
+
+    # 기존 행 미리보기 일괄 추가
+    if preview_updates:
+        sheets_batch_update(token, preview_updates)
+        logger.info(f"미리보기 수식 추가: {len(preview_updates)}개")
 
     # 새 행 일괄 추가
     if new_rows:
         sheets_append(token, new_rows)
         logger.info(f"새 행 추가: {len(new_rows)}개")
 
-    logger.info(f"완료 — 신규: {len(new_rows)}, 이미지 채움: {updated}")
+    logger.info(f"완료 — 신규: {len(new_rows)}, 이미지 채움: {updated}, 미리보기 추가: {len(preview_updates)}")
+
+    # C열 행 높이 120px로 설정 (이미지가 보이도록)
+    _set_row_heights(token, len(values) + len(new_rows))
+
+
+def _set_row_heights(token: str, total_rows: int):
+    """데이터 행 높이를 120px로 설정해 이미지가 잘 보이게 합니다."""
+    if total_rows < 2:
+        return
+    r = requests.post(
+        f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}:batchUpdate",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        json={"requests": [{
+            "updateDimensionProperties": {
+                "range": {"sheetId": 0, "dimension": "ROWS",
+                          "startIndex": 1, "endIndex": total_rows},
+                "properties": {"pixelSize": 120},
+                "fields": "pixelSize"
+            }
+        }]},
+        timeout=15,
+    )
+    if not r.ok:
+        logger.warning(f"행 높이 설정 실패 (무시): {r.text[:100]}")
 
 
 if __name__ == "__main__":

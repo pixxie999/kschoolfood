@@ -63,6 +63,7 @@ def get_first_sheet_name(token: str) -> str:
 
 
 def sheets_get(token: str, sheet_name: str) -> list:
+    # A(korean_name), B(image_url) — C는 미리보기 수식이라 건너뜀
     r = requests.get(
         f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}/values/{sheet_name}!A:B",
         headers={"Authorization": f"Bearer {token}"},
