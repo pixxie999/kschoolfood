@@ -16,7 +16,7 @@ OFFICE_CODE = os.environ.get("OFFICE_CODE", "K10")
 SCHOOL_CODE = os.environ.get("SCHOOL_CODE", "7801106")
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 COOKRCP01_API_KEY = os.environ.get("COOKRCP01_API_KEY", "")
-UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY", "")
+PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
 CF_ACCOUNT_ID = os.environ["CF_ACCOUNT_ID"]
 CF_API_TOKEN = os.environ["CF_API_TOKEN"]
 D1_DATABASE_ID = os.environ["D1_DATABASE_ID"]
@@ -223,31 +223,43 @@ def save_recipe(korean_name: str, data: dict):
     )
 
 
-def fetch_unsplash_image(english_name: str) -> str:
-    """Unsplash에서 요리 이미지 URL을 가져옵니다. (무료, 상업용 가능)"""
-    if not UNSPLASH_ACCESS_KEY or not english_name:
+def fetch_pexels_image(english_name: str, korean_name: str = "") -> str:
+    """Pexels에서 요리 이미지를 검색합니다.
+    1차: '{english_name} korean food' 검색
+    2차: 결과 없으면 '{english_name} food dish' 로 재시도
+    """
+    if not PEXELS_API_KEY or not english_name:
         return ""
-    try:
-        query = f"{english_name} korean food"
-        r = requests.get(
-            "https://api.unsplash.com/search/photos",
-            params={"query": query, "per_page": 1, "orientation": "landscape"},
-            headers={"Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"},
-            timeout=10,
-        )
-        if r.ok:
-            results = r.json().get("results", [])
-            if results:
-                # regular 크기 (1080px) 사용
-                return results[0]["urls"].get("regular", "")
-    except Exception as e:
-        logger.warning(f"Unsplash 오류 ({english_name}): {e}")
+    headers = {"Authorization": PEXELS_API_KEY}
+    queries = [
+        f"{english_name} korean food",
+        f"{english_name} food dish",
+        f"{english_name}",
+    ]
+    for query in queries:
+        try:
+            r = requests.get(
+                "https://api.pexels.com/v1/search",
+                params={"query": query, "per_page": 3, "orientation": "landscape"},
+                headers=headers,
+                timeout=10,
+            )
+            if r.ok:
+                photos = r.json().get("photos", [])
+                if photos:
+                    # large2x: 1880px 고해상도
+                    return photos[0]["src"].get("large2x") or photos[0]["src"].get("large", "")
+        except Exception as e:
+            logger.warning(f"Pexels 오류 ({query}): {e}")
     return ""
 
 
 def get_recipes_without_images() -> list:
-    """image_url이 비어있는 레시피 목록 반환."""
-    result = d1_query("SELECT korean_name, english_name FROM recipes WHERE image_url IS NULL OR image_url = ''")
+    """image_url이 없거나 Unsplash URL인 레시피 목록 반환 (Pexels로 교체 대상 포함)."""
+    result = d1_query(
+        "SELECT korean_name, english_name FROM recipes "
+        "WHERE image_url IS NULL OR image_url = '' OR image_url LIKE '%unsplash%'"
+    )
     rows = result["result"][0].get("results", [])
     return rows
 
@@ -283,8 +295,8 @@ def main():
         try:
             result = translate_recipe(name)
             # COOKRCP01 이미지 없으면 Unsplash로 보완
-            if not result.get("image_url") and UNSPLASH_ACCESS_KEY:
-                result["image_url"] = fetch_unsplash_image(result.get("english_name", name))
+            if not result.get("image_url") and PEXELS_API_KEY:
+                result["image_url"] = fetch_pexels_image(result.get("english_name", ""), name)
                 time.sleep(0.5)
             save_recipe(name, result)
             logger.info(f"저장 완료: {name} → {result.get('english_name', '')} | 이미지: {'있음' if result.get('image_url') else '없음'}")
@@ -302,9 +314,9 @@ def main():
             public = search_cookrcp01(row["korean_name"])
             img = public.get("image_url", "")
             time.sleep(0.3)
-        # 2순위: Unsplash
-        if not img and UNSPLASH_ACCESS_KEY:
-            img = fetch_unsplash_image(row.get("english_name") or row["korean_name"])
+        # 2순위: Pexels
+        if not img and PEXELS_API_KEY:
+            img = fetch_pexels_image(row.get("english_name", ""), row["korean_name"])
             time.sleep(0.5)
         if img:
             update_recipe_image(row["korean_name"], img)
