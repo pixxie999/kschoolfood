@@ -21,7 +21,7 @@ CF_ACCOUNT_ID  = os.environ["CF_ACCOUNT_ID"]
 CF_API_TOKEN   = os.environ["CF_API_TOKEN"]
 D1_DATABASE_ID = os.environ["D1_DATABASE_ID"]
 
-SHEET_NAME = "Sheet1"  # 시트 탭 이름 (기본값)
+SHEET_NAME = None  # 자동 감지
 
 
 # ── Google Sheets API (JWT 직접 인증) ──────────────────────────────────────
@@ -56,6 +56,19 @@ def _get_access_token() -> str:
     }, timeout=15)
     r.raise_for_status()
     return r.json()["access_token"]
+
+
+def get_first_sheet_name(token: str) -> str:
+    """스프레드시트의 첫 번째 탭 이름을 가져옵니다."""
+    r = requests.get(
+        f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"fields": "sheets.properties.title"},
+        timeout=15,
+    )
+    r.raise_for_status()
+    sheets = r.json().get("sheets", [])
+    return sheets[0]["properties"]["title"] if sheets else "Sheet1"
 
 
 def sheets_get(token: str, range_: str) -> list:
@@ -123,8 +136,13 @@ def get_all_recipes() -> list[dict]:
 HEADERS = ["korean_name", "image_url", "english_name", "memo"]
 
 def main():
+    global SHEET_NAME
     logger.info("Google Sheets 토큰 발급 중...")
     token = _get_access_token()
+
+    # 실제 탭 이름 자동 감지
+    SHEET_NAME = get_first_sheet_name(token)
+    logger.info(f"시트 탭 이름: {SHEET_NAME}")
 
     # 시트 현재 데이터 읽기
     values = sheets_get(token, f"{SHEET_NAME}!A:D")

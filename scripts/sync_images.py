@@ -18,7 +18,7 @@ CF_ACCOUNT_ID  = os.environ["CF_ACCOUNT_ID"]
 CF_API_TOKEN   = os.environ["CF_API_TOKEN"]
 D1_DATABASE_ID = os.environ["D1_DATABASE_ID"]
 
-SHEET_NAME = "Sheet1"
+SHEET_NAME = None  # 자동 감지
 
 
 def _get_access_token() -> str:
@@ -50,9 +50,21 @@ def _get_access_token() -> str:
     return r.json()["access_token"]
 
 
-def sheets_get(token: str) -> list:
+def get_first_sheet_name(token: str) -> str:
     r = requests.get(
-        f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}/values/{SHEET_NAME}!A:B",
+        f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"fields": "sheets.properties.title"},
+        timeout=15,
+    )
+    r.raise_for_status()
+    sheets = r.json().get("sheets", [])
+    return sheets[0]["properties"]["title"] if sheets else "Sheet1"
+
+
+def sheets_get(token: str, sheet_name: str) -> list:
+    r = requests.get(
+        f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}/values/{sheet_name}!A:B",
         headers={"Authorization": f"Bearer {token}"},
         timeout=15,
     )
@@ -87,7 +99,9 @@ def main():
 
     logger.info("Google Sheets 읽는 중...")
     token = _get_access_token()
-    values = sheets_get(token)
+    sheet_name = get_first_sheet_name(token)
+    logger.info(f"시트 탭 이름: {sheet_name}")
+    values = sheets_get(token, sheet_name)
 
     if not values or len(values) < 2:
         logger.info("시트 데이터 없음")
