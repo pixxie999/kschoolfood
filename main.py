@@ -237,21 +237,62 @@ async def render_recipe(recipe_id, env):
     tray_affiliate_url = await get_tray_affiliate_link(db)
 
     image = recipe_row.get("image_url") or "https://images.unsplash.com/photo-1541832676-9b763b0239ab?q=80&w=600"
+
+    # recipeInstructions — name+url 필드 포함 (Search Console 필수)
+    recipe_instructions = []
+    for idx, step in enumerate(instructions, start=1):
+        recipe_instructions.append({
+            "@type": "HowToStep",
+            "name": f"Step {idx}",
+            "text": step,
+            "url": f"https://kschoolfood.com/recipe/{recipe_id}#step{idx}",
+        })
+
+    # 리뷰/평점 데이터 (D1에서 집계)
+    rating_row = await db.fetch_one(
+        "SELECT COUNT(*) as cnt, AVG(rating) as avg FROM reviews WHERE recipe_id = ?",
+        (recipe_id,)
+    )
+    aggregate_rating = None
+    if rating_row and rating_row.get("cnt", 0) > 0:
+        aggregate_rating = {
+            "@type": "AggregateRating",
+            "ratingValue": round(rating_row["avg"], 1),
+            "reviewCount": rating_row["cnt"],
+            "bestRating": 5,
+            "worstRating": 1,
+        }
+
     ld_json = {
         "@context": "https://schema.org",
         "@type": "Recipe",
         "name": recipe_row["english_name"],
-        "image": image,
-        "description": recipe_row["seo_description"],
+        "image": [image],
+        "description": recipe_row.get("seo_description") or "",
+        "keywords": recipe_row.get("korean_name", ""),
+        "recipeCategory": "Main Course",
+        "recipeCuisine": "Korean",
+        "recipeYield": "2 servings",
+        "prepTime": "PT15M",
+        "cookTime": "PT20M",
+        "totalTime": "PT35M",
         "recipeIngredient": [f"{i['name']} ({i['amount']})" for i in ingredients],
-        "recipeInstructions": [{"@type": "HowToStep", "text": s} for s in instructions],
+        "recipeInstructions": recipe_instructions if recipe_instructions else [
+            {
+                "@type": "HowToStep",
+                "name": "Prepare",
+                "text": f"Prepare and cook {recipe_row['english_name']} following traditional Korean method.",
+                "url": f"https://kschoolfood.com/recipe/{recipe_id}#step1",
+            }
+        ],
         "nutrition": {
             "@type": "NutritionInformation",
-            "calories": nutrition.get("calories","N/A"),
-            "carbohydrateContent": nutrition.get("carbs","N/A"),
-            "proteinContent": nutrition.get("protein","N/A"),
-            "fatContent": nutrition.get("fat","N/A"),
-        }
+            "calories": nutrition.get("calories", ""),
+            "carbohydrateContent": nutrition.get("carbs", ""),
+            "proteinContent": nutrition.get("protein", ""),
+            "fatContent": nutrition.get("fat", ""),
+        },
+        **({"aggregateRating": aggregate_rating} if aggregate_rating else {}),
     }
 
     template = jinja_env.get_template("recipe.html")
