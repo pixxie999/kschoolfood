@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0 15 * * *'  # 매일 KST 자정 (UTC 15:00)
   workflow_dispatch:
+    inputs:
+      retranslate:
+        description: '기존 레시피 전체 재번역 (잘못 매칭된 레시피 수정)'
+        type: boolean
+        default: false
 
 jobs:
   precompute:
@@ -18,9 +23,9 @@ jobs:
       - name: Install dependencies
         run: pip install requests cryptography
 
-      # 1단계: 신규 메뉴 번역 후 D1 저장
+      # 1단계: 신규 메뉴 번역 후 D1 저장 (--retranslate 시 전체 재번역)
       - name: Translate & save recipes to D1
-        run: python scripts/precompute_recipes.py
+        run: python scripts/precompute_recipes.py ${{ github.event.inputs.retranslate == 'true' && '--retranslate' || '' }}
         env:
           NEIS_API_KEY: ${{ secrets.NEIS_API_KEY }}
           OFFICE_CODE: K10

@@ -93,54 +93,40 @@ def _clean_for_search(name: str) -> str:
     return name.strip()
 
 
-def search_cookrcp01(korean_name: str) -> dict:
+def fetch_cookrcp01_image(korean_name: str) -> str:
+    """COOKRCP01에서 이미지 URL만 가져옵니다. 레시피 데이터는 사용하지 않습니다.
+    정확도를 위해 정제된 전체 이름 일치 시에만 이미지를 반환합니다."""
     if not COOKRCP01_API_KEY:
-        return {}
-    # 1차: 정제된 전체 이름으로 검색
+        return ""
     clean_name = _clean_for_search(korean_name)
+    # 전체 이름 → 앞 4글자 → 앞 3글자 순으로 검색
     search_terms = [clean_name]
-    # 2차: 앞 4글자
     if len(clean_name) > 4:
         search_terms.append(clean_name[:4])
-    # 3차: 앞 3글자
     if len(clean_name) > 3:
         search_terms.append(clean_name[:3])
 
     try:
-        rows = []
         for term in search_terms:
             url = f"https://openapi.foodsafetykorea.go.kr/api/{COOKRCP01_API_KEY}/COOKRCP01/json/1/5/RCP_NM={term}"
             r = requests.get(url, timeout=10)
             data = r.json() if r.ok else {}
             rows = data.get("COOKRCP01", {}).get("row", [])
             if rows:
-                break
+                # 검색 결과 중 이름이 실제로 유사한 것만 이미지 사용
+                # (앞글자 검색으로 전혀 다른 레시피가 매칭되는 것 방지)
+                for row in rows:
+                    rcp_nm = row.get("RCP_NM", "")
+                    # 검색어가 레시피명에 포함되거나 그 반대인 경우만 사용
+                    if clean_name in rcp_nm or rcp_nm in clean_name or term == clean_name:
+                        img = row.get("ATT_FILE_NO_MAIN", "") or row.get("ATT_FILE_NO_MK", "")
+                        if img:
+                            logger.info(f"COOKRCP01 이미지 매칭: '{korean_name}' → '{rcp_nm}'")
+                            return img
             time.sleep(0.2)
-        if not rows:
-            return {}
-        row = rows[0]
-        instructions = []
-        for i in range(1, 21):
-            step = row.get(f"MANUAL{i:02d}", "").strip()
-            if step:
-                instructions.append(step)
-        return {
-            "category": row.get("RCP_PAT2", ""),
-            "cooking_method": row.get("RCP_WAY2", ""),
-            "ingredients_raw": row.get("RCP_PARTS_DTLS", ""),
-            "instructions_ko": instructions,
-            "nutrition": {
-                "calories": row.get("INFO_ENG", "0") + " kcal",
-                "carbs": row.get("INFO_CAR", "0") + "g",
-                "protein": row.get("INFO_PRO", "0") + "g",
-                "fat": row.get("INFO_FAT", "0") + "g",
-                "sodium": row.get("INFO_NA", "0") + "mg",
-            },
-            "image_url": row.get("ATT_FILE_NO_MAIN", "") or row.get("ATT_FILE_NO_MK", ""),
-        }
     except Exception as e:
-        logger.warning(f"COOKRCP01 오류 ({korean_name}): {e}")
-        return {}
+        logger.warning(f"COOKRCP01 이미지 조회 오류 ({korean_name}): {e}")
+    return ""
 
 
 def call_claude(prompt: str) -> dict:
@@ -167,28 +153,19 @@ def call_claude(prompt: str) -> dict:
 
 
 def translate_recipe(korean_name: str) -> dict:
-    public = search_cookrcp01(korean_name)
-    if public:
-        prompt = (
-            f"Korean dish: '{korean_name}'\n"
-            f"Category: {public.get('category', '')}\n"
-            f"Cooking method: {public.get('cooking_method', '')}\n"
-            f"Ingredients (Korean): {public.get('ingredients_raw', '')}\n"
-            f"Instructions (Korean): {chr(10).join(public.get('instructions_ko', []))}\n\n"
-            "Translate the above Korean recipe to English. "
-            "Suggest Western substitutes for hard-to-find Korean ingredients."
-        )
-    else:
-        prompt = f"Translate and create a global localized recipe for Korean school lunch dish: '{korean_name}'"
-
+    """Claude로 레시피 생성 + COOKRCP01에서 이미지만 가져옵니다.
+    레시피 내용(재료, 조리법)은 Claude가 메뉴명 기반으로 정확하게 생성합니다."""
+    # Claude로 레시피 내용 생성 (메뉴명만 전달, COOKRCP01 데이터 미사용)
+    prompt = (
+        f"Korean school lunch dish: '{korean_name}'\n\n"
+        "Create an accurate English recipe for this dish. "
+        "Use authentic ingredients for this specific dish. "
+        "Suggest Western substitutes for hard-to-find Korean ingredients."
+    )
     result = call_claude(prompt)
 
-    if public:
-        if public.get("nutrition"):
-            result["nutrition_info"] = public["nutrition"]
-        result["image_url"] = public.get("image_url", "")
-    else:
-        result["image_url"] = ""
+    # COOKRCP01에서 이미지만 가져옴 (레시피 데이터는 무시)
+    result["image_url"] = fetch_cookrcp01_image(korean_name)
 
     return result
 
@@ -274,6 +251,37 @@ def update_recipe_image(korean_name: str, image_url: str):
 SKIP_NAMES = {"", "Rice", "Soup", "Side 1", "Side 2", "Side 3"}
 
 
+def retranslate_all():
+    """기존 레시피를 Claude 창작 방식으로 전부 재생성합니다 (--retranslate 옵션)."""
+    result = d1_query("SELECT korean_name FROM recipes")
+    all_names = [r["korean_name"] for r in result["result"][0].get("results", [])]
+    logger.info(f"재번역 대상: {len(all_names)}개")
+    for name in all_names:
+        logger.info(f"재번역 중: {name}")
+        try:
+            data = translate_recipe(name)
+            # 이미지는 기존 값 유지 (재번역 시 이미지 덮어쓰지 않음)
+            d1_query(
+                """UPDATE recipes SET
+                    english_name = ?, english_ingredients = ?, local_substitutes = ?,
+                    instructions = ?, seo_description = ?, nutrition_info = ?
+                WHERE korean_name = ?""",
+                [
+                    data.get("english_name", ""),
+                    json.dumps(data.get("english_ingredients", []), ensure_ascii=False),
+                    json.dumps(data.get("local_substitutes", []), ensure_ascii=False),
+                    json.dumps(data.get("instructions", []), ensure_ascii=False),
+                    data.get("seo_description", ""),
+                    json.dumps(data.get("nutrition_info", {}), ensure_ascii=False),
+                    name,
+                ],
+            )
+            logger.info(f"재번역 완료: {name} → {data.get('english_name', '')}")
+        except Exception as e:
+            logger.error(f"재번역 실패 ({name}): {e}")
+        time.sleep(1.2)
+
+
 def main():
     today = datetime.now()
     # 14일 → 7일로 단축 (비용 절감: NEIS API 호출 절반 감소)
@@ -304,17 +312,17 @@ def main():
             logger.error(f"실패 ({name}): {e}")
         time.sleep(1)
 
-    # 기존 레시피 중 이미지 없는 것 보완 (COOKRCP01 → Unsplash 순)
+    # 기존 레시피 중 이미지 없는 것 보완 (COOKRCP01 이미지 → Pexels 순)
     no_img = get_recipes_without_images()
     logger.info(f"이미지 없는 기존 레시피: {len(no_img)}개 보완 중")
     for row in no_img:
         img = ""
-        # 1순위: COOKRCP01 재시도 (정제된 이름으로)
+        # 1순위: COOKRCP01 이미지 (실제 한국 요리 사진, 품질 좋음)
         if COOKRCP01_API_KEY:
-            public = search_cookrcp01(row["korean_name"])
-            img = public.get("image_url", "")
-            time.sleep(0.3)
-        # 2순위: Pexels
+            img = fetch_cookrcp01_image(row["korean_name"])
+            if img:
+                time.sleep(0.3)
+        # 2순위: Pexels (COOKRCP01 이미지 없을 때)
         if not img and PEXELS_API_KEY:
             img = fetch_pexels_image(row.get("english_name", ""), row["korean_name"])
             time.sleep(0.5)
@@ -326,4 +334,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if "--retranslate" in sys.argv:
+        retranslate_all()
+    else:
+        main()
