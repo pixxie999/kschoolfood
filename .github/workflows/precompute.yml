@@ -4,11 +4,6 @@ on:
   schedule:
     - cron: '0 15 * * *'  # 매일 KST 자정 (UTC 15:00)
   workflow_dispatch:
-    inputs:
-      retranslate:
-        description: '기존 레시피 전체 재번역 (잘못 매칭된 레시피 수정)'
-        type: boolean
-        default: false
 
 jobs:
   precompute:
@@ -23,33 +18,19 @@ jobs:
       - name: Install dependencies
         run: pip install requests cryptography
 
-      # 1단계: 신규 메뉴 번역 후 D1 저장 (--retranslate 시 전체 재번역)
-      - name: Translate & save recipes to D1
-        run: python scripts/precompute_recipes.py ${{ github.event.inputs.retranslate == 'true' && '--retranslate' || '' }}
+      # 1단계: NEIS 7일치 메뉴 수집 → 구글 시트 신규 행 추가
+      - name: Collect menus from NEIS → Google Sheet
+        run: python scripts/collect_menus.py
         env:
           NEIS_API_KEY: ${{ secrets.NEIS_API_KEY }}
           OFFICE_CODE: K10
           SCHOOL_CODE: '7801106'
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          COOKRCP01_API_KEY: ${{ secrets.COOKRCP01_API_KEY }}
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
-
-      # 2단계: D1 레시피 전체 → 구글 시트로 내보내기 (없는 행만 추가)
-      - name: Export recipes to Google Sheet
-        run: python scripts/export_to_sheet.py
-        env:
           SHEET_ID: ${{ secrets.SHEET_ID }}
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
-          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
 
-      # 3단계: 구글 시트에서 수정된 image_url → D1 반영
-      - name: Sync image URLs from Google Sheet to D1
-        run: python scripts/sync_images.py
+      # 2단계: 구글 시트 전체 → D1 반영 (영어명, 재료, 조리법, 이미지)
+      - name: Sync Google Sheet → D1
+        run: python scripts/sync_sheet_to_d1.py
         env:
           SHEET_ID: ${{ secrets.SHEET_ID }}
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
