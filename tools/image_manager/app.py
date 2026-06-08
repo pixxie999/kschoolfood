@@ -29,6 +29,59 @@ R2_BUCKET      = os.environ["R2_BUCKET_NAME"]
 R2_PUBLIC_URL  = os.environ["R2_PUBLIC_URL"].rstrip("/")
 SHEET_ID       = os.environ["SHEET_ID"]
 SA_JSON_PATH   = os.environ.get("GOOGLE_SA_JSON_PATH", "")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+
+# ── 로그인 보호 ────────────────────────────────────────────────────────────
+from functools import wraps
+from flask import session, redirect, url_for
+
+app.secret_key = os.environ.get("SECRET_KEY", os.urandom(24).hex())
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if ADMIN_PASSWORD and not session.get("logged_in"):
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error = ""
+    if request.method == "POST":
+        if request.form.get("password") == ADMIN_PASSWORD:
+            session["logged_in"] = True
+            return redirect(url_for("index"))
+        error = "비밀번호가 틀렸습니다."
+    return f"""<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>🍱 K-School Food 관리자</title>
+<script src="https://cdn.tailwindcss.com"></script></head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+<div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm space-y-5">
+  <div class="text-center">
+    <p class="text-4xl mb-2">🍱</p>
+    <h1 class="font-bold text-xl text-gray-900">K-School Food</h1>
+    <p class="text-sm text-gray-400">관리자 로그인</p>
+  </div>
+  {'<p class="text-sm text-red-500 text-center bg-red-50 rounded-lg py-2">' + error + '</p>' if error else ''}
+  <form method="post" class="space-y-4">
+    <input type="password" name="password" placeholder="비밀번호"
+      class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+      autofocus>
+    <button type="submit"
+      class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition-colors">
+      로그인
+    </button>
+  </form>
+</div>
+</body></html>"""
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 def _load_sa() -> dict:
     if SA_JSON_PATH and Path(SA_JSON_PATH).exists():
@@ -172,10 +225,12 @@ def convert_to_webp(file_bytes: bytes, max_size: int = 1200, quality: int = 85) 
 
 # ── Flask 라우트 ───────────────────────────────────────────────────────────
 @app.route("/")
+@login_required
 def index():
     return render_template("index.html")
 
 @app.route("/api/recipes")
+@login_required
 def api_recipes():
     try:
         data = get_sheet_data()
@@ -185,6 +240,7 @@ def api_recipes():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route("/api/recipe/<int:row>", methods=["PUT"])
+@login_required
 def api_update_recipe(row):
     """영어명, 재료, 조리법, 메모를 시트에 저장"""
     try:
@@ -206,6 +262,7 @@ def api_update_recipe(row):
         return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route("/api/upload", methods=["POST"])
+@login_required
 def api_upload():
     try:
         row         = int(request.form.get("row", 0))

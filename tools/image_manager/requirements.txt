@@ -1,0 +1,7 @@
+flask>=3.0
+Pillow>=10.0
+boto3>=1.34
+requests>=2.31
+cryptography>=42.0
+python-dotenv>=1.0
+gunicorn>=21.0
