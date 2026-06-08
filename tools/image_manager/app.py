@@ -1,6 +1,6 @@
 """
-K-School Food 이미지 관리 도구
-- 구글 시트 메뉴 목록 + 이미지 조회
+K-School Food 메뉴 관리 도구
+- 구글 시트 메뉴 목록 조회 / 편집 (영어명, 재료, 조리법, 메모)
 - 로컬 이미지 → WebP 변환 → R2 업로드 → 시트 반영
 """
 import os, io, json, time, base64, uuid, logging
@@ -36,7 +36,7 @@ def _load_sa() -> dict:
     raw = os.environ.get("GOOGLE_SA_JSON", "")
     if raw:
         return json.loads(raw)
-    raise RuntimeError("서비스 계정 JSON을 찾을 수 없습니다. .env 파일을 확인하세요.")
+    raise RuntimeError("서비스 계정 JSON을 찾을 수 없습니다.")
 
 # ── Google Sheets ──────────────────────────────────────────────────────────
 def _get_token(scope: str) -> str:
@@ -71,7 +71,7 @@ def _sheet_name(token: str) -> str:
     return sheets[0]["properties"]["title"] if sheets else "Sheet1"
 
 def get_sheet_data() -> list[dict]:
-    """시트 전체 읽기 → [{"row": n, "korean_name": ..., "image_url": ..., "english_name": ...}]"""
+    """시트 A:G 읽기"""
     token = _get_token("https://www.googleapis.com/auth/spreadsheets.readonly")
     sname = _sheet_name(token)
     r = requests.get(
@@ -97,28 +97,46 @@ def get_sheet_data() -> list[dict]:
         if not name:
             continue
         result.append({
-            "row": i,
-            "korean_name": name,
-            "image_url": col(row, "image_url"),
+            "row":          i,
+            "korean_name":  name,
             "english_name": col(row, "english_name"),
-            "memo": col(row, "memo"),
+            "image_url":    col(row, "image_url"),
+            "ingredients":  col(row, "ingredients"),
+            "instructions": col(row, "instructions"),
+            "memo":         col(row, "memo"),
         })
     return result
 
-def update_sheet_image(row: int, image_url: str):
-    """C열(image_url)과 D열(미리보기 수식) 업데이트"""
+def update_sheet_row(row: int, fields: dict):
+    """시트 한 행의 여러 컬럼을 한번에 업데이트.
+    컬럼: B=english_name, C=image_url, D=미리보기, E=ingredients, F=instructions, G=memo
+    """
     token = _get_token("https://www.googleapis.com/auth/spreadsheets")
     sname = _sheet_name(token)
+
+    data = []
+    col_map = {
+        "english_name": f"{sname}!B{row}",
+        "image_url":    f"{sname}!C{row}",
+        "ingredients":  f"{sname}!E{row}",
+        "instructions": f"{sname}!F{row}",
+        "memo":         f"{sname}!G{row}",
+    }
+    for key, range_ in col_map.items():
+        if key in fields:
+            data.append({"range": range_, "values": [[fields[key]]]})
+
+    # 이미지 URL이 있으면 D열 미리보기 수식도 업데이트
+    if "image_url" in fields and fields["image_url"]:
+        data.append({"range": f"{sname}!D{row}", "values": [[f"=IMAGE(C{row})"]]})
+
+    if not data:
+        return
+
     r = requests.post(
         f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}/values:batchUpdate",
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-        json={
-            "valueInputOption": "USER_ENTERED",
-            "data": [
-                {"range": f"{sname}!C{row}", "values": [[image_url]]},
-                {"range": f"{sname}!D{row}", "values": [[f"=IMAGE(C{row})"]]}
-            ]
-        },
+        json={"valueInputOption": "USER_ENTERED", "data": data},
         timeout=15,
     )
     r.raise_for_status()
@@ -135,19 +153,14 @@ def get_r2_client():
     )
 
 def upload_to_r2(image_bytes: bytes, filename: str) -> str:
-    """WebP 이미지를 R2에 업로드하고 퍼블릭 URL 반환"""
     client = get_r2_client()
     client.put_object(
-        Bucket=R2_BUCKET,
-        Key=filename,
-        Body=image_bytes,
-        ContentType="image/webp",
-        CacheControl="public, max-age=31536000",
+        Bucket=R2_BUCKET, Key=filename, Body=image_bytes,
+        ContentType="image/webp", CacheControl="public, max-age=31536000",
     )
     return f"{R2_PUBLIC_URL}/{filename}"
 
 def convert_to_webp(file_bytes: bytes, max_size: int = 1200, quality: int = 85) -> bytes:
-    """이미지를 WebP로 변환, 긴 쪽을 max_size로 리사이즈"""
     img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
     w, h = img.size
     if max(w, h) > max_size:
@@ -171,40 +184,51 @@ def api_recipes():
         logger.error(f"시트 읽기 오류: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
 
+@app.route("/api/recipe/<int:row>", methods=["PUT"])
+def api_update_recipe(row):
+    """영어명, 재료, 조리법, 메모를 시트에 저장"""
+    try:
+        body = request.get_json()
+        if not body:
+            return jsonify({"ok": False, "error": "데이터 없음"}), 400
+
+        allowed = {"english_name", "ingredients", "instructions", "memo"}
+        fields = {k: v for k, v in body.items() if k in allowed}
+        if not fields:
+            return jsonify({"ok": False, "error": "저장할 필드 없음"}), 400
+
+        update_sheet_row(row, fields)
+        logger.info(f"저장 완료: row={row}, fields={list(fields.keys())}")
+        return jsonify({"ok": True})
+
+    except Exception as e:
+        logger.error(f"저장 오류: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
     try:
-        row        = int(request.form.get("row", 0))
+        row         = int(request.form.get("row", 0))
         korean_name = request.form.get("korean_name", "")
-        file       = request.files.get("image")
+        file        = request.files.get("image")
 
         if not file or not row:
             return jsonify({"ok": False, "error": "이미지와 행 번호가 필요합니다."}), 400
 
-        # WebP 변환
         original = file.read()
-        webp = convert_to_webp(original)
+        webp     = convert_to_webp(original)
 
-        # 파일명: 메뉴명(영문안전) + uuid 앞 8자
-        safe_name = "".join(c if c.isalnum() else "_" for c in korean_name)[:30]
-        filename  = f"recipes/{safe_name}_{uuid.uuid4().hex[:8]}.webp"
-
-        # R2 업로드
+        safe_name  = "".join(c if c.isalnum() else "_" for c in korean_name)[:30]
+        filename   = f"recipes/{safe_name}_{uuid.uuid4().hex[:8]}.webp"
         public_url = upload_to_r2(webp, filename)
 
-        # 시트 업데이트
-        update_sheet_image(row, public_url)
+        update_sheet_row(row, {"image_url": public_url})
 
         orig_kb = len(original) // 1024
         webp_kb = len(webp) // 1024
         logger.info(f"업로드 완료: {korean_name} → {public_url} ({orig_kb}KB → {webp_kb}KB)")
 
-        return jsonify({
-            "ok": True,
-            "url": public_url,
-            "original_kb": orig_kb,
-            "webp_kb": webp_kb,
-        })
+        return jsonify({"ok": True, "url": public_url, "original_kb": orig_kb, "webp_kb": webp_kb})
 
     except Exception as e:
         logger.error(f"업로드 오류: {e}")
@@ -212,7 +236,7 @@ def api_upload():
 
 if __name__ == "__main__":
     print("=" * 50)
-    print("  K-School Food 이미지 관리 도구")
+    print("  K-School Food 메뉴 관리 도구")
     print("  http://localhost:5001 에서 실행 중")
     print("=" * 50)
     app.run(debug=True, port=5001)

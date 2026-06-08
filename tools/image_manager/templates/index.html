@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🍱 K-School Food 메뉴 관리</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .drop-zone { border: 2px dashed #d1d5db; transition: all .2s; }
+  .drop-zone.drag-over { border-color: #f97316; background: #fff7ed; }
+  .menu-row { cursor: pointer; transition: background .15s; }
+  .menu-row:hover { background: #fef3c7; }
+  .menu-row.selected { background: #fed7aa; border-left: 4px solid #f97316; }
+  .img-thumb { width: 72px; height: 54px; object-fit: cover; border-radius: 6px; flex-shrink:0; }
+  .img-placeholder { width: 72px; height: 54px; background: #f3f4f6; border-radius: 6px;
+    display:flex; align-items:center; justify-content:center; font-size:1.4rem; flex-shrink:0; }
+  .status-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .field-label { font-size:.7rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:.05em; color:#9ca3af; margin-bottom:4px; }
+  textarea { resize: vertical; min-height: 90px; }
+  .save-btn { transition: all .15s; }
+  .save-btn:disabled { opacity:.5; cursor:not-allowed; }
+</style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+<!-- 헤더 -->
+<header class="bg-white border-b shadow-sm px-5 py-3 flex items-center justify-between sticky top-0 z-10">
+  <div class="flex items-center space-x-3">
+    <span class="text-2xl">🍱</span>
+    <div>
+      <h1 class="font-bold text-lg text-gray-900 leading-tight">K-School Food 메뉴 관리</h1>
+      <p class="text-xs text-gray-400">구글 시트 연동 · 이미지 R2 업로드</p>
+    </div>
+  </div>
+  <div class="flex items-center space-x-3">
+    <div id="stat" class="text-xs text-gray-400 hidden">
+      <span id="stat-total" class="font-semibold text-gray-600"></span>개 중
+      <span id="stat-done" class="font-semibold text-green-600"></span>개 완성
+    </div>
+    <button onclick="loadRecipes()"
+      class="bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold px-4 py-2 rounded-lg flex items-center space-x-1">
+      <span>🔄</span><span>새로고침</span>
+    </button>
+  </div>
+</header>
+
+<div class="flex h-[calc(100vh-57px)]">
+
+  <!-- 왼쪽: 메뉴 목록 -->
+  <div class="w-80 shrink-0 border-r bg-white flex flex-col">
+
+    <!-- 검색 + 필터 -->
+    <div class="px-3 py-2 border-b space-y-2">
+      <input id="search" type="search" placeholder="메뉴 검색..."
+        class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300"
+        oninput="filterRecipes()">
+      <div class="flex space-x-1">
+        <button onclick="setFilter('all')"   id="f-all"   class="filter-btn active flex-1 text-xs py-1 rounded-md font-semibold">전체</button>
+        <button onclick="setFilter('done')"  id="f-done"  class="filter-btn flex-1 text-xs py-1 rounded-md font-semibold">완성</button>
+        <button onclick="setFilter('todo')"  id="f-todo"  class="filter-btn flex-1 text-xs py-1 rounded-md font-semibold">미완성</button>
+      </div>
+    </div>
+
+    <!-- 로딩 -->
+    <div id="loading" class="flex-1 flex items-center justify-center text-gray-400">
+      <div class="text-center"><div class="text-3xl mb-2">⏳</div><p class="text-sm">불러오는 중...</p></div>
+    </div>
+
+    <!-- 목록 -->
+    <div id="menu-list" class="flex-1 overflow-y-auto hidden divide-y"></div>
+  </div>
+
+  <!-- 오른쪽: 편집 패널 -->
+  <div class="flex-1 overflow-y-auto bg-gray-50">
+
+    <!-- 미선택 상태 -->
+    <div id="no-selection" class="h-full flex items-center justify-center text-gray-400">
+      <div class="text-center"><p class="text-5xl mb-3">👈</p><p class="font-semibold">왼쪽에서 메뉴를 선택하세요</p></div>
+    </div>
+
+    <!-- 편집 폼 -->
+    <div id="edit-panel" class="hidden p-5 space-y-5 max-w-2xl">
+
+      <!-- 메뉴명 -->
+      <div class="bg-white rounded-xl border border-gray-200 p-4">
+        <p class="field-label">한국어 메뉴명</p>
+        <p id="f-korean" class="text-2xl font-bold text-gray-900"></p>
+        <p id="f-row-info" class="text-xs text-gray-400 mt-1"></p>
+      </div>
+
+      <!-- 영어명 -->
+      <div class="bg-white rounded-xl border border-gray-200 p-4">
+        <p class="field-label">영어 메뉴명 (English Name)</p>
+        <input id="f-english" type="text" placeholder="예) Kimchi Fried Rice"
+          class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 mt-1 focus:outline-none focus:ring-2 focus:ring-orange-300">
+      </div>
+
+      <!-- 이미지 -->
+      <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+        <p class="field-label">대표 이미지</p>
+        <div class="flex items-start space-x-4">
+          <div id="img-preview-wrap">
+            <div class="img-placeholder text-2xl" id="img-placeholder">🖼️</div>
+          </div>
+          <div class="flex-1 space-y-2">
+            <p id="img-url-text" class="text-xs text-gray-400 break-all leading-relaxed">(이미지 없음)</p>
+            <div id="drop-zone"
+              class="drop-zone rounded-lg p-4 text-center cursor-pointer"
+              onclick="document.getElementById('file-input').click()"
+              ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+              <p class="text-2xl mb-1">📁</p>
+              <p class="text-xs text-gray-600 font-semibold">드래그 또는 클릭하여 이미지 선택</p>
+              <p class="text-xs text-gray-400">JPG · PNG · WEBP · 자동 WebP 변환</p>
+              <input id="file-input" type="file" accept="image/*" class="hidden" onchange="previewFile(this)">
+            </div>
+          </div>
+        </div>
+
+        <!-- 업로드 미리보기 -->
+        <div id="upload-preview" class="hidden bg-orange-50 border border-orange-100 rounded-lg p-3 flex items-center space-x-3">
+          <img id="upload-img" class="w-16 h-12 object-cover rounded-md">
+          <div class="flex-1 text-sm">
+            <p class="font-semibold text-gray-800" id="upload-name"></p>
+            <p class="text-xs text-gray-500" id="upload-size"></p>
+          </div>
+          <button onclick="clearUpload()" class="text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+
+        <!-- 업로드 버튼 -->
+        <button id="upload-btn" onclick="uploadImage()"
+          class="hidden w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-lg text-sm flex items-center justify-center space-x-2">
+          <span>⬆️</span><span>R2에 업로드</span>
+        </button>
+
+        <!-- 업로드 결과 -->
+        <div id="upload-result" class="hidden bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
+          <p class="font-semibold text-green-800 mb-1">✅ 업로드 완료!</p>
+          <p class="text-gray-600">용량: <span id="result-size" class="font-semibold"></span></p>
+        </div>
+      </div>
+
+      <!-- 재료 -->
+      <div class="bg-white rounded-xl border border-gray-200 p-4">
+        <div class="flex items-center justify-between mb-2">
+          <p class="field-label">재료 (한 줄에 하나씩)</p>
+          <span class="text-xs text-gray-400">예: 쌀 1컵</span>
+        </div>
+        <textarea id="f-ingredients"
+          placeholder="쌀 1컵&#10;쇠고기 100g&#10;당근 1/2개&#10;간장 2큰술"
+          class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300"></textarea>
+      </div>
+
+      <!-- 조리법 -->
+      <div class="bg-white rounded-xl border border-gray-200 p-4">
+        <div class="flex items-center justify-between mb-2">
+          <p class="field-label">조리법 (한 줄에 한 단계)</p>
+          <span class="text-xs text-gray-400">번호는 자동 처리</span>
+        </div>
+        <textarea id="f-instructions" style="min-height:140px"
+          placeholder="1. 쌀을 씻어 30분 불린다&#10;2. 쇠고기는 잘게 다진다&#10;3. 냄비에 참기름을 두르고 볶는다"
+          class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300"></textarea>
+      </div>
+
+      <!-- 메모 -->
+      <div class="bg-white rounded-xl border border-gray-200 p-4">
+        <p class="field-label mb-2">메모 (내부용)</p>
+        <input id="f-memo" type="text" placeholder="내부 메모..."
+          class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
+      </div>
+
+      <!-- 저장 버튼 -->
+      <div class="flex items-center space-x-3 pb-6">
+        <button id="save-btn" onclick="saveRecipe()"
+          class="save-btn flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl text-sm flex items-center justify-center space-x-2">
+          <span>💾</span><span>구글 시트에 저장</span>
+        </button>
+        <div id="save-status" class="text-sm hidden"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<style>
+.filter-btn { background:#f3f4f6; color:#6b7280; }
+.filter-btn.active { background:#fed7aa; color:#c2410c; }
+</style>
+
+<script>
+let allRecipes = [];
+let filteredRecipes = [];
+let selectedRecipe = null;
+let selectedFile = null;
+let currentFilter = 'all';
+
+function imgError(el) {
+  if (el.dataset.errored) return;
+  el.dataset.errored = '1';
+  el.onerror = null;
+  el.style.display = 'none';
+  const ph = document.createElement('div');
+  ph.className = 'img-placeholder';
+  ph.textContent = '🍽️';
+  el.parentNode.insertBefore(ph, el);
+}
+
+// ── 완성도 판단 ──────────────────────────────────────────────────────────
+function isDone(r) {
+  return !!(r.english_name && r.image_url && r.ingredients);
+}
+
+function completionClass(r) {
+  const has = [r.english_name, r.image_url, r.ingredients, r.instructions].filter(Boolean).length;
+  if (has === 4) return 'bg-green-400';
+  if (has >= 2) return 'bg-yellow-400';
+  return 'bg-gray-300';
+}
+
+// ── 데이터 로드 ──────────────────────────────────────────────────────────
+async function loadRecipes() {
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('menu-list').classList.add('hidden');
+  document.getElementById('stat').classList.add('hidden');
+  try {
+    const res = await fetch('/api/recipes');
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+    allRecipes = data.data;
+    updateStats();
+    filterRecipes();
+  } catch(e) {
+    document.getElementById('loading').innerHTML =
+      `<div class="text-center text-red-400"><p class="text-3xl mb-2">❌</p><p class="text-sm">${e.message}</p></div>`;
+  }
+}
+
+function updateStats() {
+  const done = allRecipes.filter(isDone).length;
+  document.getElementById('stat-total').textContent = allRecipes.length;
+  document.getElementById('stat-done').textContent = done;
+  document.getElementById('stat').classList.remove('hidden');
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('f-' + f).classList.add('active');
+  filterRecipes();
+}
+
+function filterRecipes() {
+  const q = document.getElementById('search').value.toLowerCase();
+  filteredRecipes = allRecipes.filter(r => {
+    const matchQ = !q || r.korean_name.includes(q) || (r.english_name||'').toLowerCase().includes(q);
+    const matchF = currentFilter === 'all' ? true
+                 : currentFilter === 'done' ? isDone(r)
+                 : !isDone(r);
+    return matchQ && matchF;
+  });
+  renderList();
+}
+
+function renderList() {
+  document.getElementById('loading').classList.add('hidden');
+  const list = document.getElementById('menu-list');
+  list.classList.remove('hidden');
+
+  list.innerHTML = filteredRecipes.map(r => `
+    <div class="menu-row px-3 py-2.5 flex items-center space-x-3 ${selectedRecipe?.row === r.row ? 'selected' : ''}"
+         onclick="selectRecipe(${r.row})">
+      ${r.image_url
+        ? `<img src="${r.image_url}" class="img-thumb" onerror="imgError(this)">`
+        : '<div class="img-placeholder">🍽️</div>'}
+      <div class="flex-1 min-w-0">
+        <p class="font-semibold text-gray-900 text-sm truncate">${r.korean_name}</p>
+        <p class="text-xs text-gray-400 truncate">${r.english_name || '미번역'}</p>
+        <div class="flex space-x-1 mt-1">
+          <span class="text-xs ${r.image_url ? 'text-green-500' : 'text-gray-300'}">📷</span>
+          <span class="text-xs ${r.english_name ? 'text-green-500' : 'text-gray-300'}">🔤</span>
+          <span class="text-xs ${r.ingredients ? 'text-green-500' : 'text-gray-300'}">🥕</span>
+          <span class="text-xs ${r.instructions ? 'text-green-500' : 'text-gray-300'}">📋</span>
+        </div>
+      </div>
+      <div class="status-dot ${completionClass(r)}"></div>
+    </div>
+  `).join('');
+}
+
+// ── 메뉴 선택 ────────────────────────────────────────────────────────────
+function selectRecipe(row) {
+  selectedRecipe = allRecipes.find(r => r.row === row);
+  if (!selectedRecipe) return;
+
+  clearUpload();
+  document.getElementById('no-selection').classList.add('hidden');
+  document.getElementById('edit-panel').classList.remove('hidden');
+  document.getElementById('upload-result').classList.add('hidden');
+  document.getElementById('save-status').classList.add('hidden');
+
+  // 필드 채우기
+  document.getElementById('f-korean').textContent = selectedRecipe.korean_name;
+  document.getElementById('f-row-info').textContent = `시트 ${selectedRecipe.row}행`;
+  document.getElementById('f-english').value = selectedRecipe.english_name || '';
+  document.getElementById('f-ingredients').value = selectedRecipe.ingredients || '';
+  document.getElementById('f-instructions').value = selectedRecipe.instructions || '';
+  document.getElementById('f-memo').value = selectedRecipe.memo || '';
+
+  // 이미지 미리보기
+  const wrap = document.getElementById('img-preview-wrap');
+  if (selectedRecipe.image_url) {
+    wrap.innerHTML = `<img src="${selectedRecipe.image_url}" class="img-thumb" onerror="imgError(this)">`;
+    document.getElementById('img-url-text').textContent = selectedRecipe.image_url;
+  } else {
+    wrap.innerHTML = '<div class="img-placeholder text-2xl" id="img-placeholder">🖼️</div>';
+    document.getElementById('img-url-text').textContent = '(이미지 없음)';
+  }
+
+  // 목록 선택 표시
+  document.querySelectorAll('.menu-row').forEach(el => el.classList.remove('selected'));
+  event?.currentTarget?.classList.add('selected');
+  renderList();
+}
+
+// ── 파일 드래그앤드롭 ────────────────────────────────────────────────────
+function dragOver(e)  { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+function dragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+function dropFile(e)  {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) setUploadPreview(file);
+}
+function previewFile(input) { if (input.files[0]) setUploadPreview(input.files[0]); }
+
+function setUploadPreview(file) {
+  selectedFile = file;
+  const url = URL.createObjectURL(file);
+  document.getElementById('upload-img').src = url;
+  document.getElementById('upload-name').textContent = file.name;
+  document.getElementById('upload-size').textContent =
+    `${(file.size/1024).toFixed(0)} KB → WebP 변환 후 업로드`;
+  document.getElementById('upload-preview').classList.remove('hidden');
+  document.getElementById('upload-btn').classList.remove('hidden');
+  document.getElementById('upload-result').classList.add('hidden');
+}
+
+function clearUpload() {
+  selectedFile = null;
+  document.getElementById('upload-preview').classList.add('hidden');
+  document.getElementById('upload-btn').classList.add('hidden');
+  document.getElementById('file-input').value = '';
+}
+
+// ── 이미지 업로드 ────────────────────────────────────────────────────────
+async function uploadImage() {
+  if (!selectedFile || !selectedRecipe) return;
+  const btn = document.getElementById('upload-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="animate-spin inline-block">⏳</span><span>업로드 중...</span>';
+
+  try {
+    const form = new FormData();
+    form.append('image', selectedFile);
+    form.append('row', selectedRecipe.row);
+    form.append('korean_name', selectedRecipe.korean_name);
+
+    const res = await fetch('/api/upload', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+
+    // 미리보기 업데이트
+    document.getElementById('img-preview-wrap').innerHTML =
+      `<img src="${data.url}" class="img-thumb" onerror="imgError(this)">`;
+    document.getElementById('img-url-text').textContent = data.url;
+    document.getElementById('result-size').textContent =
+      `${data.original_kb}KB → ${data.webp_kb}KB (WebP)`;
+    document.getElementById('upload-result').classList.remove('hidden');
+
+    // 캐시 업데이트
+    selectedRecipe.image_url = data.url;
+    allRecipes = allRecipes.map(r => r.row === selectedRecipe.row ? {...r, image_url: data.url} : r);
+    updateStats();
+    filterRecipes();
+    clearUpload();
+  } catch(e) {
+    alert('업로드 실패: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<span>⬆️</span><span>R2에 업로드</span>';
+  }
+}
+
+// ── 레시피 저장 ──────────────────────────────────────────────────────────
+async function saveRecipe() {
+  if (!selectedRecipe) return;
+
+  const btn    = document.getElementById('save-btn');
+  const status = document.getElementById('save-status');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="animate-spin inline-block">⏳</span><span>저장 중...</span>';
+  status.classList.add('hidden');
+
+  const fields = {
+    english_name:  document.getElementById('f-english').value.trim(),
+    ingredients:   document.getElementById('f-ingredients').value.trim(),
+    instructions:  document.getElementById('f-instructions').value.trim(),
+    memo:          document.getElementById('f-memo').value.trim(),
+  };
+
+  try {
+    const res = await fetch(`/api/recipe/${selectedRecipe.row}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+
+    // 캐시 업데이트
+    Object.assign(selectedRecipe, fields);
+    allRecipes = allRecipes.map(r => r.row === selectedRecipe.row ? {...r, ...fields} : r);
+    updateStats();
+    filterRecipes();
+
+    status.textContent = '✅ 저장됨';
+    status.className = 'text-sm text-green-600 font-semibold';
+    status.classList.remove('hidden');
+    setTimeout(() => status.classList.add('hidden'), 3000);
+  } catch(e) {
+    status.textContent = '❌ ' + e.message;
+    status.className = 'text-sm text-red-500';
+    status.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<span>💾</span><span>구글 시트에 저장</span>';
+  }
+}
+
+// Ctrl+S 단축키
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault();
+    if (selectedRecipe) saveRecipe();
+  }
+});
+
+loadRecipes();
+</script>
+</body>
+</html>
