@@ -403,6 +403,7 @@ async function saveRecipe() {
   status.classList.add('hidden');
 
   const fields = {
+    korean_name:   selectedRecipe.korean_name,
     english_name:  document.getElementById('f-english').value.trim(),
     ingredients:   document.getElementById('f-ingredients').value.trim(),
     instructions:  document.getElementById('f-instructions').value.trim(),

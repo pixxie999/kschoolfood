@@ -3,7 +3,7 @@ K-School Food 메뉴 관리 도구
 - 구글 시트 메뉴 목록 조회 / 편집 (영어명, 재료, 조리법, 메모)
 - 로컬 이미지 → WebP 변환 → R2 업로드 → 시트 반영
 """
-import os, io, json, time, base64, uuid, logging
+import os, io, json, time, base64, uuid, logging, hashlib
 from pathlib import Path
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, jsonify
@@ -30,6 +30,9 @@ R2_PUBLIC_URL  = os.environ["R2_PUBLIC_URL"].rstrip("/")
 SHEET_ID       = os.environ["SHEET_ID"]
 SA_JSON_PATH   = os.environ.get("GOOGLE_SA_JSON_PATH", "")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+CF_ACCOUNT_ID  = os.environ.get("CF_ACCOUNT_ID", "")
+CF_API_TOKEN   = os.environ.get("CF_API_TOKEN", "")
+D1_DATABASE_ID = os.environ.get("D1_DATABASE_ID", "")
 
 # ── 로그인 보호 ────────────────────────────────────────────────────────────
 from functools import wraps
@@ -90,6 +93,95 @@ def _load_sa() -> dict:
     if raw:
         return json.loads(raw)
     raise RuntimeError("서비스 계정 JSON을 찾을 수 없습니다.")
+
+# ── Cloudflare D1 ─────────────────────────────────────────────────────────
+import re
+
+def _d1_query(sql: str, params: list | None = None) -> dict:
+    """D1 REST API 쿼리 실행."""
+    if not (CF_ACCOUNT_ID and CF_API_TOKEN and D1_DATABASE_ID):
+        raise RuntimeError("D1 환경변수(CF_ACCOUNT_ID, CF_API_TOKEN, D1_DATABASE_ID) 미설정")
+    url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/d1/database/{D1_DATABASE_ID}/query"
+    payload: dict = {"sql": sql}
+    if params:
+        payload["params"] = params
+    r = requests.post(url, headers={
+        "Authorization": f"Bearer {CF_API_TOKEN}",
+        "Content-Type": "application/json",
+    }, json=payload, timeout=30)
+    r.raise_for_status()
+    result = r.json()
+    if not result.get("success"):
+        raise RuntimeError(f"D1 오류: {result.get('errors')}")
+    return result
+
+
+def _parse_ingredients(text: str) -> list:
+    """줄바꿈 구분 재료 텍스트 → JSON 배열."""
+    if not text:
+        return []
+    result = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = re.match(r'^(.+?)\s+([\d½¼¾]+\s*\S*)$', line)
+        if m:
+            result.append({"name": m.group(1).strip(), "amount": m.group(2).strip()})
+        else:
+            result.append({"name": line, "amount": ""})
+    return result
+
+
+def _parse_instructions(text: str) -> list:
+    """줄바꿈 구분 조리법 텍스트 → JSON 배열."""
+    if not text:
+        return []
+    result = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        line = re.sub(r'^[\d]+[.)]\s*', '', line)
+        line = re.sub(r'^[①②③④⑤⑥⑦⑧⑨⑩]\s*', '', line)
+        if line:
+            result.append(line)
+    return result
+
+
+def upsert_recipe_to_d1(korean_name: str, fields: dict):
+    """변경된 필드만 D1 recipes 테이블에 upsert. 빈 값은 기존값 유지."""
+    english_name   = fields.get("english_name", "")
+    image_url      = fields.get("image_url", "")
+    ingredients_tx = fields.get("ingredients", "")
+    instructions_tx = fields.get("instructions", "")
+
+    ingredients_json  = json.dumps(_parse_ingredients(ingredients_tx), ensure_ascii=False) \
+        if ingredients_tx else None
+    instructions_json = json.dumps(_parse_instructions(instructions_tx), ensure_ascii=False) \
+        if instructions_tx else None
+
+    _d1_query(
+        """
+        INSERT INTO recipes (korean_name, english_name, image_url, english_ingredients, instructions, seo_description)
+        VALUES (?, ?, ?, ?, ?, '')
+        ON CONFLICT(korean_name) DO UPDATE SET
+            english_name        = CASE WHEN ? != '' THEN ? ELSE recipes.english_name END,
+            image_url           = CASE WHEN ? != '' THEN ? ELSE recipes.image_url END,
+            english_ingredients = CASE WHEN ? IS NOT NULL THEN ? ELSE recipes.english_ingredients END,
+            instructions        = CASE WHEN ? IS NOT NULL THEN ? ELSE recipes.instructions END
+        """,
+        [
+            korean_name, english_name, image_url,
+            ingredients_json or "[]", instructions_json or "[]",
+            english_name, english_name,
+            image_url, image_url,
+            ingredients_json, ingredients_json,
+            instructions_json, instructions_json,
+        ]
+    )
+    logger.info(f"D1 upsert 완료: {korean_name}")
+
 
 # ── Google Sheets ──────────────────────────────────────────────────────────
 def _get_token(scope: str) -> str:
@@ -254,7 +346,17 @@ def api_update_recipe(row):
             return jsonify({"ok": False, "error": "저장할 필드 없음"}), 400
 
         update_sheet_row(row, fields)
-        logger.info(f"저장 완료: row={row}, fields={list(fields.keys())}")
+        logger.info(f"시트 저장 완료: row={row}, fields={list(fields.keys())}")
+
+        # D1에도 즉시 반영
+        korean_name = body.get("korean_name", "")
+        if korean_name:
+            try:
+                upsert_recipe_to_d1(korean_name, fields)
+            except Exception as d1_err:
+                logger.warning(f"D1 upsert 실패 (시트는 저장됨): {d1_err}")
+                return jsonify({"ok": True, "warn": f"시트 저장 완료, D1 반영 실패: {d1_err}"})
+
         return jsonify({"ok": True})
 
     except Exception as e:
@@ -275,11 +377,20 @@ def api_upload():
         original = file.read()
         webp     = convert_to_webp(original)
 
-        safe_name  = "".join(c if c.isalnum() else "_" for c in korean_name)[:30]
-        filename   = f"recipes/{safe_name}_{uuid.uuid4().hex[:8]}.webp"
+        # 한글 파일명 URL 인코딩 문제 방지 — 메뉴명 MD5 해시 사용
+        # 같은 메뉴는 항상 같은 파일명 → 중복 업로드 방지
+        name_hash = hashlib.md5(korean_name.encode()).hexdigest()[:16]
+        filename  = f"recipes/{name_hash}.webp"
         public_url = upload_to_r2(webp, filename)
 
         update_sheet_row(row, {"image_url": public_url})
+
+        # D1에도 즉시 반영
+        if korean_name:
+            try:
+                upsert_recipe_to_d1(korean_name, {"image_url": public_url})
+            except Exception as d1_err:
+                logger.warning(f"D1 이미지 upsert 실패 (시트는 저장됨): {d1_err}")
 
         orig_kb = len(original) // 1024
         webp_kb = len(webp) // 1024
