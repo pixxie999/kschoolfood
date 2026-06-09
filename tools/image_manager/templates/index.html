@@ -474,6 +474,10 @@ async function saveRecipe() {
     fat:             document.getElementById('f-fat').value.trim(),
     memo:            document.getElementById('f-memo').value.trim(),
   };
+  // HTML import로 이미지가 업데이트된 경우에만 image_url 포함
+  if (selectedRecipe.image_url) {
+    fields.image_url = selectedRecipe.image_url;
+  }
 
   try {
     const res = await fetch(`/api/recipe/${selectedRecipe.row}`, {

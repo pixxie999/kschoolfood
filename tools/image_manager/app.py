@@ -366,7 +366,7 @@ def api_update_recipe(row):
         if not body:
             return jsonify({"ok": False, "error": "데이터 없음"}), 400
 
-        allowed = {"english_name", "ingredients", "instructions", "memo",
+        allowed = {"english_name", "image_url", "ingredients", "instructions", "memo",
                    "seo_description", "calories", "carbs", "protein", "fat"}
         fields = {k: v for k, v in body.items() if k in allowed}
         if not fields:
