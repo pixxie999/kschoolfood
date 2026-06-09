@@ -30,63 +30,147 @@
         </h2>
         
         <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
-            <!-- 3 Side Dishes on the TOP (For Desktop) -->
+            <!-- 3 Side Dishes on the TOP -->
             {% for dish in dishes[2:] %}
             <div class="md:col-span-2">
                 {% if dish.has_recipe %}
-                <a href="/recipe/{{ dish.recipe_id }}" class="block bg-slate-100 hover:bg-white text-slate-900 border-2 border-slate-300 rounded-2xl p-4 h-36 flex flex-col justify-between shadow-inner hover-lift cursor-pointer transition-all">
-                    <div>
-                        <span class="text-[10px] font-bold text-orange-600 uppercase">{{ dish.role }}</span>
-                        <h3 class="font-outfit font-bold text-base line-clamp-2 mt-1">{{ dish.english_name }}</h3>
-                        <p class="text-xs text-gray-500 line-clamp-1 mt-0.5">{{ dish.korean_name }}</p>
-                        {% if dish.allergies %}
-                        <div class="flex flex-wrap gap-1 mt-1">
-                            {% for a in dish.allergies[:3] %}<span class="text-[9px] bg-red-50 text-red-500 border border-red-100 px-1.5 py-0.5 rounded-full">{{ a }}</span>{% endfor %}
+                <a href="/recipe/{{ dish.recipe_id }}"
+                   class="block relative overflow-hidden border-2 border-slate-300 rounded-2xl h-36 shadow-inner hover-lift cursor-pointer transition-all group">
+                    {% if dish.image_url %}
+                    <img src="{{ dish.image_url }}" alt="{{ dish.english_name }}"
+                         class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
+                    {% else %}
+                    <div class="absolute inset-0 bg-slate-100 group-hover:bg-white transition-colors"></div>
+                    {% endif %}
+                    <div class="relative h-full flex flex-col justify-between p-4">
+                        <div>
+                            <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded
+                                {% if dish.image_url %}text-orange-300 bg-black/30{% else %}text-orange-600{% endif %}">
+                                {{ dish.role }}
+                            </span>
+                            {% if dish.allergies %}
+                            <div class="flex flex-wrap gap-1 mt-1">
+                                {% for a in dish.allergies[:3] %}
+                                <span class="text-[9px] px-1.5 py-0.5 rounded-full
+                                    {% if dish.image_url %}bg-black/40 text-red-300{% else %}bg-red-50 text-red-500 border border-red-100{% endif %}">
+                                    {{ a }}
+                                </span>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
                         </div>
-                        {% endif %}
-                    </div>
-                    <div class="text-right">
-                        <span class="text-[10px] bg-orange-100 text-orange-800 font-bold px-2 py-0.5 rounded-full">View Recipe &rarr;</span>
+                        <div>
+                            <h3 class="font-outfit font-bold text-base line-clamp-2
+                                {% if dish.image_url %}text-white drop-shadow{% else %}text-slate-900{% endif %}">
+                                {{ dish.english_name }}
+                            </h3>
+                            <p class="text-xs line-clamp-1 mt-0.5
+                                {% if dish.image_url %}text-white/70{% else %}text-gray-500{% endif %}">
+                                {{ dish.korean_name }}
+                            </p>
+                            <span class="text-[10px] font-bold mt-1 inline-block
+                                {% if dish.image_url %}text-orange-300{% else %}bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full{% endif %}">
+                                View Recipe &rarr;
+                            </span>
+                        </div>
                     </div>
                 </a>
                 {% else %}
-                <div class="bg-slate-100 border-2 border-slate-300 rounded-2xl p-4 h-36 flex flex-col justify-between shadow-inner opacity-75">
-                    <div>
-                        <span class="text-[10px] font-bold text-slate-500 uppercase">{{ dish.role }}</span>
-                        <h3 class="font-outfit font-semibold text-slate-600 text-base line-clamp-2 mt-1">{{ dish.english_name }}</h3>
-                        <p class="text-xs text-slate-400 line-clamp-1 mt-0.5">{{ dish.korean_name }}</p>
-                    </div>
-                    <div class="text-right">
-                        <span class="text-[9px] bg-slate-200 text-slate-500 font-medium px-2 py-0.5 rounded-full">No Recipe</span>
+                <div class="relative overflow-hidden border-2 border-slate-300 rounded-2xl h-36 shadow-inner opacity-80">
+                    {% if dish.image_url %}
+                    <img src="{{ dish.image_url }}" alt="{{ dish.english_name }}"
+                         class="absolute inset-0 w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
+                    {% else %}
+                    <div class="absolute inset-0 bg-slate-100"></div>
+                    {% endif %}
+                    <div class="relative h-full flex flex-col justify-between p-4">
+                        <span class="text-[10px] font-bold uppercase
+                            {% if dish.image_url %}text-white/60{% else %}text-slate-500{% endif %}">
+                            {{ dish.role }}
+                        </span>
+                        <div>
+                            <h3 class="font-outfit font-semibold text-base line-clamp-2
+                                {% if dish.image_url %}text-white drop-shadow{% else %}text-slate-600{% endif %}">
+                                {{ dish.english_name }}
+                            </h3>
+                            <p class="text-xs line-clamp-1 mt-0.5
+                                {% if dish.image_url %}text-white/60{% else %}text-slate-400{% endif %}">
+                                {{ dish.korean_name }}
+                            </p>
+                            <span class="text-[9px] font-medium mt-1 inline-block
+                                {% if dish.image_url %}text-white/50{% else %}bg-slate-200 text-slate-500 px-2 py-0.5 rounded-full{% endif %}">
+                                No Recipe
+                            </span>
+                        </div>
                     </div>
                 </div>
                 {% endif %}
             </div>
             {% endfor %}
 
-            <!-- Bottom Row: Rice (3 cols) and Soup (3 cols) -->
             <!-- Main Rice Compartment -->
             <div class="md:col-span-3">
                 {% if dishes[0].has_recipe %}
-                <a href="/recipe/{{ dishes[0].recipe_id }}" class="block bg-slate-100 hover:bg-white text-slate-900 border-2 border-slate-300 rounded-2xl p-6 h-48 flex flex-col justify-between shadow-inner hover-lift cursor-pointer transition-all">
-                    <div>
-                        <span class="text-xs font-bold text-orange-600 uppercase">{{ dishes[0].role }}</span>
-                        <h3 class="font-outfit font-extrabold text-lg mt-2">{{ dishes[0].english_name }}</h3>
-                        <p class="text-sm text-gray-500 mt-1">{{ dishes[0].korean_name }}</p>
-                    </div>
-                    <div class="text-right">
-                        <span class="text-[11px] bg-orange-100 text-orange-800 font-bold px-3 py-1 rounded-full">View Recipe &rarr;</span>
+                <a href="/recipe/{{ dishes[0].recipe_id }}"
+                   class="block relative overflow-hidden border-2 border-slate-300 rounded-2xl h-48 shadow-inner hover-lift cursor-pointer transition-all group">
+                    {% if dishes[0].image_url %}
+                    <img src="{{ dishes[0].image_url }}" alt="{{ dishes[0].english_name }}"
+                         class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"></div>
+                    {% else %}
+                    <div class="absolute inset-0 bg-slate-100 group-hover:bg-white transition-colors"></div>
+                    {% endif %}
+                    <div class="relative h-full flex flex-col justify-between p-6">
+                        <span class="text-xs font-bold uppercase
+                            {% if dishes[0].image_url %}text-orange-300 bg-black/30 px-2 py-0.5 rounded self-start{% else %}text-orange-600{% endif %}">
+                            {{ dishes[0].role }}
+                        </span>
+                        <div>
+                            <h3 class="font-outfit font-extrabold text-lg
+                                {% if dishes[0].image_url %}text-white drop-shadow{% else %}text-slate-900{% endif %}">
+                                {{ dishes[0].english_name }}
+                            </h3>
+                            <p class="text-sm mt-1
+                                {% if dishes[0].image_url %}text-white/70{% else %}text-gray-500{% endif %}">
+                                {{ dishes[0].korean_name }}
+                            </p>
+                            <span class="text-[11px] font-bold mt-2 inline-block
+                                {% if dishes[0].image_url %}text-orange-300{% else %}bg-orange-100 text-orange-800 px-3 py-1 rounded-full{% endif %}">
+                                View Recipe &rarr;
+                            </span>
+                        </div>
                     </div>
                 </a>
                 {% else %}
-                <div class="bg-slate-100 border-2 border-slate-300 rounded-2xl p-6 h-48 flex flex-col justify-between shadow-inner opacity-80">
-                    <div>
-                        <span class="text-xs font-bold text-slate-500 uppercase">{{ dishes[0].role }}</span>
-                        <h3 class="font-outfit font-bold text-slate-600 text-lg mt-2">{{ dishes[0].english_name }}</h3>
-                        <p class="text-sm text-slate-400 mt-1">{{ dishes[0].korean_name }}</p>
-                    </div>
-                    <div class="text-right">
-                        <span class="text-[10px] bg-slate-200 text-slate-500 font-medium px-2.5 py-0.5 rounded-full">No Recipe</span>
+                <div class="relative overflow-hidden border-2 border-slate-300 rounded-2xl h-48 shadow-inner opacity-80">
+                    {% if dishes[0].image_url %}
+                    <img src="{{ dishes[0].image_url }}" alt="{{ dishes[0].english_name }}"
+                         class="absolute inset-0 w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent"></div>
+                    {% else %}
+                    <div class="absolute inset-0 bg-slate-100"></div>
+                    {% endif %}
+                    <div class="relative h-full flex flex-col justify-between p-6">
+                        <span class="text-xs font-bold uppercase
+                            {% if dishes[0].image_url %}text-white/60{% else %}text-slate-500{% endif %}">
+                            {{ dishes[0].role }}
+                        </span>
+                        <div>
+                            <h3 class="font-outfit font-bold text-lg
+                                {% if dishes[0].image_url %}text-white drop-shadow{% else %}text-slate-600{% endif %}">
+                                {{ dishes[0].english_name }}
+                            </h3>
+                            <p class="text-sm mt-1
+                                {% if dishes[0].image_url %}text-white/70{% else %}text-slate-400{% endif %}">
+                                {{ dishes[0].korean_name }}
+                            </p>
+                            <span class="text-[10px] font-medium mt-2 inline-block
+                                {% if dishes[0].image_url %}text-white/50{% else %}bg-slate-200 text-slate-500 px-2.5 py-0.5 rounded-full{% endif %}">
+                                No Recipe
+                            </span>
+                        </div>
                     </div>
                 </div>
                 {% endif %}
@@ -95,25 +179,64 @@
             <!-- Soup/Stew Compartment -->
             <div class="md:col-span-3">
                 {% if dishes[1].has_recipe %}
-                <a href="/recipe/{{ dishes[1].recipe_id }}" class="block bg-slate-100 hover:bg-white text-slate-900 border-2 border-slate-300 rounded-2xl p-6 h-48 flex flex-col justify-between shadow-inner hover-lift cursor-pointer transition-all">
-                    <div>
-                        <span class="text-xs font-bold text-orange-600 uppercase">{{ dishes[1].role }}</span>
-                        <h3 class="font-outfit font-extrabold text-lg mt-2">{{ dishes[1].english_name }}</h3>
-                        <p class="text-sm text-gray-500 mt-1">{{ dishes[1].korean_name }}</p>
-                    </div>
-                    <div class="text-right">
-                        <span class="text-[11px] bg-orange-100 text-orange-800 font-bold px-3 py-1 rounded-full">View Recipe &rarr;</span>
+                <a href="/recipe/{{ dishes[1].recipe_id }}"
+                   class="block relative overflow-hidden border-2 border-slate-300 rounded-2xl h-48 shadow-inner hover-lift cursor-pointer transition-all group">
+                    {% if dishes[1].image_url %}
+                    <img src="{{ dishes[1].image_url }}" alt="{{ dishes[1].english_name }}"
+                         class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"></div>
+                    {% else %}
+                    <div class="absolute inset-0 bg-slate-100 group-hover:bg-white transition-colors"></div>
+                    {% endif %}
+                    <div class="relative h-full flex flex-col justify-between p-6">
+                        <span class="text-xs font-bold uppercase
+                            {% if dishes[1].image_url %}text-orange-300 bg-black/30 px-2 py-0.5 rounded self-start{% else %}text-orange-600{% endif %}">
+                            {{ dishes[1].role }}
+                        </span>
+                        <div>
+                            <h3 class="font-outfit font-extrabold text-lg
+                                {% if dishes[1].image_url %}text-white drop-shadow{% else %}text-slate-900{% endif %}">
+                                {{ dishes[1].english_name }}
+                            </h3>
+                            <p class="text-sm mt-1
+                                {% if dishes[1].image_url %}text-white/70{% else %}text-gray-500{% endif %}">
+                                {{ dishes[1].korean_name }}
+                            </p>
+                            <span class="text-[11px] font-bold mt-2 inline-block
+                                {% if dishes[1].image_url %}text-orange-300{% else %}bg-orange-100 text-orange-800 px-3 py-1 rounded-full{% endif %}">
+                                View Recipe &rarr;
+                            </span>
+                        </div>
                     </div>
                 </a>
                 {% else %}
-                <div class="bg-slate-100 border-2 border-slate-300 rounded-2xl p-6 h-48 flex flex-col justify-between shadow-inner opacity-80">
-                    <div>
-                        <span class="text-xs font-bold text-slate-500 uppercase">{{ dishes[1].role }}</span>
-                        <h3 class="font-outfit font-bold text-slate-600 text-lg mt-2">{{ dishes[1].english_name }}</h3>
-                        <p class="text-sm text-slate-400 mt-1">{{ dishes[1].korean_name }}</p>
-                    </div>
-                    <div class="text-right">
-                        <span class="text-[10px] bg-slate-200 text-slate-500 font-medium px-2.5 py-0.5 rounded-full">No Recipe</span>
+                <div class="relative overflow-hidden border-2 border-slate-300 rounded-2xl h-48 shadow-inner opacity-80">
+                    {% if dishes[1].image_url %}
+                    <img src="{{ dishes[1].image_url }}" alt="{{ dishes[1].english_name }}"
+                         class="absolute inset-0 w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent"></div>
+                    {% else %}
+                    <div class="absolute inset-0 bg-slate-100"></div>
+                    {% endif %}
+                    <div class="relative h-full flex flex-col justify-between p-6">
+                        <span class="text-xs font-bold uppercase
+                            {% if dishes[1].image_url %}text-white/60{% else %}text-slate-500{% endif %}">
+                            {{ dishes[1].role }}
+                        </span>
+                        <div>
+                            <h3 class="font-outfit font-bold text-lg
+                                {% if dishes[1].image_url %}text-white drop-shadow{% else %}text-slate-600{% endif %}">
+                                {{ dishes[1].english_name }}
+                            </h3>
+                            <p class="text-sm mt-1
+                                {% if dishes[1].image_url %}text-white/70{% else %}text-slate-400{% endif %}">
+                                {{ dishes[1].korean_name }}
+                            </p>
+                            <span class="text-[10px] font-medium mt-2 inline-block
+                                {% if dishes[1].image_url %}text-white/50{% else %}bg-slate-200 text-slate-500 px-2.5 py-0.5 rounded-full{% endif %}">
+                                No Recipe
+                            </span>
+                        </div>
                     </div>
                 </div>
                 {% endif %}

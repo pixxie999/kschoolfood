@@ -108,6 +108,7 @@ async def render_index(url, env):
             "english_name": recipe.get("english_name") if recipe else ko,
             "recipe_id": recipe.get("id") if recipe else None,
             "has_recipe": recipe is not None,
+            "image_url": (recipe.get("image_url") or "") if recipe else "",
         })
 
     # 빠진 칸 채우기 (5칸 유지)
