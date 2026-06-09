@@ -698,6 +698,49 @@ def _extract_nutrition_by_label_from_text(text: str, result: dict):
             result[key] = m.group(1).strip()
 
 
+# ── 식단 배치 API ─────────────────────────────────────────────────────────
+
+@app.route("/api/meals")
+@login_required
+def api_meals():
+    """최근 N일 meal_trays 조회"""
+    try:
+        days = int(request.args.get("days", 14))
+        result = _d1_query(
+            f"SELECT date, rice, soup, side1, side2, side3, calories FROM meal_trays "
+            f"ORDER BY date DESC LIMIT {days}"
+        )
+        rows = result["result"][0].get("results", [])
+        return jsonify({"ok": True, "data": rows})
+    except Exception as e:
+        logger.error(f"식단 조회 오류: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/meal/<date>", methods=["PUT"])
+@login_required
+def api_update_meal(date):
+    """식단 슬롯 재배치 저장 (rice/soup/side1/side2/side3)"""
+    try:
+        body = request.get_json()
+        if not body:
+            return jsonify({"ok": False, "error": "데이터 없음"}), 400
+
+        allowed = {"rice", "soup", "side1", "side2", "side3"}
+        fields  = {k: v for k, v in body.items() if k in allowed}
+        if not fields:
+            return jsonify({"ok": False, "error": "저장할 필드 없음"}), 400
+
+        sets   = ", ".join(f"{k} = ?" for k in fields)
+        params = list(fields.values()) + [date]
+        _d1_query(f"UPDATE meal_trays SET {sets} WHERE date = ?", params)
+        logger.info(f"식단 배치 저장: {date} → {fields}")
+        return jsonify({"ok": True})
+    except Exception as e:
+        logger.error(f"식단 저장 오류: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 # ── HTML Import 엔드포인트 ─────────────────────────────────────────────────
 
 @app.route("/api/import-html", methods=["POST"])
