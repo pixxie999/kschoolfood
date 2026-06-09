@@ -2,18 +2,41 @@
 
 {% block title %}{{ recipe.english_name }} Recipe - K-School Food{% endblock %}
 {% block meta_desc %}{{ recipe.seo_description }}{% endblock %}
-{% block canonical %}https://kschoolfood.pixxie999.workers.dev/recipe/{{ recipe.id }}{% endblock %}
-{% block og_title %}{{ recipe.english_name }} Recipe | Korean School Meal Localization{% endblock %}
-{% block og_desc %}{{ recipe.seo_description }}{% endblock %}
-{% block og_url %}https://kschoolfood.pixxie999.workers.dev/recipe/{{ recipe.id }}{% endblock %}
+{% block canonical %}https://kschoolfood.com/recipe/{{ recipe.id }}{% endblock %}
+{% block og_title %}{{ recipe.english_name }} Recipe | K-School Food{% endblock %}
+{% block og_desc %}{{ recipe.seo_description or recipe.english_name ~ ' — Korean school lunch recipe with ingredients, nutrition info, and cooking instructions.' }}{% endblock %}
+{% block og_url %}https://kschoolfood.com/recipe/{{ recipe.id }}{% endblock %}
 
 {% block head_extra %}
 <script type="application/ld+json">{{ ld_json | safe }}</script>
 {% endblock %}
 
 {% block content %}
+
+{% set is_empty = not recipe.english_name and not recipe.english_ingredients %}
+
 <div class="space-y-8 animate-fade-in">
 
+    {% if is_empty %}
+    <!-- 빈 레시피: Coming Soon 안내 -->
+    <div class="bg-white border border-gray-100 rounded-2xl p-8 shadow-sm text-center space-y-4">
+        <a href="/" class="text-xs font-bold text-orange-500 hover:underline uppercase tracking-wider flex items-center justify-center space-x-1">
+            <span>&larr;</span><span>Back to daily tray</span>
+        </a>
+        <p class="text-5xl mt-4">🍱</p>
+        <h1 class="text-2xl md:text-3xl font-outfit font-extrabold text-gray-900">
+            {{ recipe.korean_name }}
+        </h1>
+        <p class="text-sm text-gray-500">This recipe is not yet available in English.</p>
+        <div class="inline-flex items-center space-x-2 bg-orange-50 border border-orange-100 text-orange-700 text-sm font-semibold px-5 py-2.5 rounded-xl">
+            <span>⏳</span><span>Recipe coming soon — check back later!</span>
+        </div>
+        <p class="text-xs text-gray-400 pt-2">
+            In the meantime, search for <strong>{{ recipe.korean_name }}</strong> to learn more about this dish.
+        </p>
+    </div>
+
+    {% else %}
     <!-- Recipe Title Header -->
     <div class="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
         {% if recipe.image_url %}
@@ -228,6 +251,7 @@
             </div>
         </div>
     </div>
+    {% endif %}{# end is_empty else #}
 </div>
 
 <script>
