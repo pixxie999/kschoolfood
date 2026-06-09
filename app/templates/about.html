@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}About - K-School Food{% endblock %}
+{% block meta_desc %}About K-School Food. We translate Korean school lunch menus into English recipes for global food lovers.{% endblock %}
+{% block canonical %}https://kschoolfood.com/about{% endblock %}
+
+{% block content %}
+<article class="prose prose-gray max-w-none">
+  <h1 class="font-outfit text-3xl font-bold text-gray-900 mb-6">About K-School Food</h1>
+
+  <div class="bg-orange-50 border border-orange-100 rounded-2xl p-6 mb-8">
+    <p class="text-lg text-gray-700 leading-relaxed">
+      <strong>K-School Food</strong> brings Korean school lunch culture to the world.
+      We translate real daily menus from Korean schools into easy-to-follow English recipes
+      so anyone can cook authentic Korean dishes at home.
+    </p>
+  </div>
+
+  <h2 class="text-xl font-bold mt-8 mb-3">Our Mission</h2>
+  <p>Korean school lunches are famous worldwide for their variety, nutrition, and delicious taste. But finding actual recipes in English has always been a challenge. K-School Food bridges that gap by:</p>
+  <ul class="list-disc pl-6 space-y-1 mt-3">
+    <li>Fetching <strong>real daily menus</strong> from the Korean NEIS (National Education Information System) public API</li>
+    <li>Translating each dish into <strong>clear English recipes</strong> with step-by-step instructions</li>
+    <li>Suggesting <strong>locally available ingredient substitutions</strong> for international cooks</li>
+    <li>Presenting menus in a fun <strong>5-compartment meal tray</strong> format — just like Korean school cafeterias</li>
+  </ul>
+
+  <h2 class="text-xl font-bold mt-8 mb-3">How It Works</h2>
+  <div class="grid gap-4 mt-4 md:grid-cols-3">
+    <div class="bg-white border border-gray-100 rounded-xl p-5 text-center shadow-sm">
+      <p class="text-3xl mb-2">📡</p>
+      <p class="font-bold text-gray-800">1. Collect</p>
+      <p class="text-sm text-gray-500 mt-1">We pull daily school lunch menus from Korea's official NEIS open data system</p>
+    </div>
+    <div class="bg-white border border-gray-100 rounded-xl p-5 text-center shadow-sm">
+      <p class="text-3xl mb-2">✍️</p>
+      <p class="font-bold text-gray-800">2. Translate</p>
+      <p class="text-sm text-gray-500 mt-1">Each dish is translated with proper English names, ingredients, and cooking steps</p>
+    </div>
+    <div class="bg-white border border-gray-100 rounded-xl p-5 text-center shadow-sm">
+      <p class="text-3xl mb-2">🍱</p>
+      <p class="font-bold text-gray-800">3. Serve</p>
+      <p class="text-sm text-gray-500 mt-1">Browse today's menu, explore recipes, and cook Korean school food at home</p>
+    </div>
+  </div>
+
+  <h2 class="text-xl font-bold mt-8 mb-3">Data Sources</h2>
+  <p>All school lunch data comes from the <strong>NEIS Open API</strong>, a public government data service operated by the Korean Ministry of Education. This data is freely available and regularly updated.</p>
+
+  <h2 class="text-xl font-bold mt-8 mb-3">Contact Us</h2>
+  <p>Have a question, suggestion, or found an error in a recipe? We'd love to hear from you!</p>
+  <ul class="list-disc pl-6 space-y-1 mt-3">
+    <li><strong>Email:</strong> <a href="mailto:contact@kschoolfood.com" class="text-orange-600 hover:underline">contact@kschoolfood.com</a></li>
+    <li><strong>Website:</strong> <a href="https://kschoolfood.com" class="text-orange-600 hover:underline">kschoolfood.com</a></li>
+  </ul>
+</article>
+{% endblock %}

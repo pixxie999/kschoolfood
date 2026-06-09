@@ -163,6 +163,41 @@
           class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300"></textarea>
       </div>
 
+      <!-- 레시피 설명 -->
+      <div class="bg-white rounded-xl border border-gray-200 p-4">
+        <p class="field-label mb-2">레시피 설명 <span class="text-xs text-gray-400 font-normal">(SEO용 1~2문장)</span></p>
+        <textarea id="f-seo-description" style="min-height:72px"
+          placeholder="A comforting Korean braised tofu dish simmered in a savory soy sauce glaze..."
+          class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300"></textarea>
+      </div>
+
+      <!-- 영양정보 -->
+      <div class="bg-white rounded-xl border border-gray-200 p-4">
+        <p class="field-label mb-3">영양정보 <span class="text-xs text-gray-400 font-normal">(1인분 기준)</span></p>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">칼로리 (kcal)</label>
+            <input id="f-calories" type="text" placeholder="예) 320 kcal"
+              class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">탄수화물 (g)</label>
+            <input id="f-carbs" type="text" placeholder="예) 45g"
+              class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">단백질 (g)</label>
+            <input id="f-protein" type="text" placeholder="예) 18g"
+              class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">지방 (g)</label>
+            <input id="f-fat" type="text" placeholder="예) 8g"
+              class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
+          </div>
+        </div>
+      </div>
+
       <!-- 메모 -->
       <div class="bg-white rounded-xl border border-gray-200 p-4">
         <p class="field-label mb-2">메모 (내부용)</p>
@@ -305,6 +340,11 @@ function selectRecipe(row) {
   document.getElementById('f-english').value = selectedRecipe.english_name || '';
   document.getElementById('f-ingredients').value = selectedRecipe.ingredients || '';
   document.getElementById('f-instructions').value = selectedRecipe.instructions || '';
+  document.getElementById('f-seo-description').value = selectedRecipe.seo_description || '';
+  document.getElementById('f-calories').value = selectedRecipe.calories || '';
+  document.getElementById('f-carbs').value = selectedRecipe.carbs || '';
+  document.getElementById('f-protein').value = selectedRecipe.protein || '';
+  document.getElementById('f-fat').value = selectedRecipe.fat || '';
   document.getElementById('f-memo').value = selectedRecipe.memo || '';
 
   // 이미지 미리보기
@@ -403,11 +443,16 @@ async function saveRecipe() {
   status.classList.add('hidden');
 
   const fields = {
-    korean_name:   selectedRecipe.korean_name,
-    english_name:  document.getElementById('f-english').value.trim(),
-    ingredients:   document.getElementById('f-ingredients').value.trim(),
-    instructions:  document.getElementById('f-instructions').value.trim(),
-    memo:          document.getElementById('f-memo').value.trim(),
+    korean_name:     selectedRecipe.korean_name,
+    english_name:    document.getElementById('f-english').value.trim(),
+    ingredients:     document.getElementById('f-ingredients').value.trim(),
+    instructions:    document.getElementById('f-instructions').value.trim(),
+    seo_description: document.getElementById('f-seo-description').value.trim(),
+    calories:        document.getElementById('f-calories').value.trim(),
+    carbs:           document.getElementById('f-carbs').value.trim(),
+    protein:         document.getElementById('f-protein').value.trim(),
+    fat:             document.getElementById('f-fat').value.trim(),
+    memo:            document.getElementById('f-memo').value.trim(),
   };
 
   try {

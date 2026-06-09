@@ -313,6 +313,9 @@ async def render_sitemap(host, env):
     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     xml += f'  <url><loc>{host}/</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>\n'
     xml += f'  <url><loc>{host}/week</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>\n'
+    xml += f'  <url><loc>{host}/about</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>\n'
+    xml += f'  <url><loc>{host}/privacy</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>\n'
+    xml += f'  <url><loc>{host}/terms</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>\n'
     for r in recipes:
         xml += f'  <url><loc>{host}/recipe/{r["id"]}</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\n'
     xml += '</urlset>'
@@ -322,6 +325,22 @@ async def render_sitemap(host, env):
 async def render_robots(host):
     txt = f"User-agent: *\nAllow: /\nDisallow:\n\nSitemap: {host}/sitemap.xml\n"
     return Response(txt, headers={"Content-Type": "text/plain; charset=utf-8"})
+
+
+async def render_ads_txt(env):
+    pub_id = getattr(env, 'ADSENSE_PUBLISHER_ID', '') if env else os.environ.get('ADSENSE_PUBLISHER_ID', '')
+    if pub_id:
+        pub_id = pub_id.replace("ca-", "", 1)
+    else:
+        pub_id = "pub-XXXXXXXXXXXXXXXX"
+    txt = f"google.com, {pub_id}, DIRECT, f08c47fec0942fa0\n"
+    return Response(txt, headers={"Content-Type": "text/plain; charset=utf-8"})
+
+
+async def render_static_page(template_name, env):
+    tmpl = jinja_env.get_template(template_name)
+    html = tmpl.render()
+    return Response(html, headers={"Content-Type": "text/html; charset=utf-8"})
 
 
 async def handle_review_post(request, recipe_id, env):
@@ -398,6 +417,14 @@ class Default(WorkerEntrypoint):
             return await render_sitemap(host, env)
         elif path == "/robots.txt":
             return await render_robots(host)
+        elif path == "/ads.txt":
+            return await render_ads_txt(env)
+        elif path == "/privacy":
+            return await render_static_page("privacy.html", env)
+        elif path == "/terms":
+            return await render_static_page("terms.html", env)
+        elif path == "/about":
+            return await render_static_page("about.html", env)
         elif path.startswith("/api/reviews/"):
             try:
                 recipe_id = int(path.split("/")[-1])

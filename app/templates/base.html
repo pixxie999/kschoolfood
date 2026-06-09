@@ -18,14 +18,17 @@
       gtag('config', 'G-CRZF966L52');
     </script>
 
+    <!-- Google AdSense -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
+
     <!-- Canonical & Sitemap -->
-    <link rel="canonical" href="{% block canonical %}https://kschoolfood.pixxie999.workers.dev/{% endblock %}">
+    <link rel="canonical" href="{% block canonical %}https://kschoolfood.com/{% endblock %}">
 
     <!-- OpenGraph Tags for Social Networks (Pinterest/Instagram) -->
     <meta property="og:title" content="{% block og_title %}K-School Food - Healthy School Lunch Recipes{% endblock %}">
     <meta property="og:description" content="{% block og_desc %}Explore daily Korean school lunch menu translated with local substitutes and shopping links.{% endblock %}">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="{% block og_url %}https://kschoolfood.pixxie999.workers.dev/{% endblock %}">
+    <meta property="og:url" content="{% block og_url %}https://kschoolfood.com/{% endblock %}">
     <meta property="og:image" content="https://images.unsplash.com/photo-1541832676-9b763b0239ab?q=80&w=600">
     
     <!-- Google Fonts -->
@@ -109,6 +112,11 @@
             <div class="max-w-xl mx-auto border-t border-gray-100 pt-3 text-[10px] text-gray-400">
                 Disclaimer: As an Amazon Associate and iHerb Rewards member, this site earns from qualifying purchases. 
                 Product details and availability on affiliate stores are subject to change.
+            </div>
+            <div class="flex justify-center gap-4 pt-2 text-gray-400">
+                <a href="/about" class="hover:text-orange-500 transition-colors">About</a>
+                <a href="/privacy" class="hover:text-orange-500 transition-colors">Privacy Policy</a>
+                <a href="/terms" class="hover:text-orange-500 transition-colors">Terms of Service</a>
             </div>
             <p class="pt-2 text-gray-400">&copy; 2026 K-School Food. All rights reserved.</p>
         </div>

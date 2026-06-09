@@ -9,6 +9,11 @@
   E: ingredients  (줄바꿈 구분 텍스트)
   F: instructions (줄바꿈 구분 텍스트)
   G: memo
+  H: seo_description
+  I: calories
+  J: carbs
+  K: protein
+  L: fat
 
 - 비어있는 셀은 D1 기존값 유지 (사용자가 일부만 채워도 됨)
 - image_url, english_name, ingredients, instructions 모두 반영
@@ -75,9 +80,9 @@ def get_sheet_name(token: str) -> str:
 
 
 def read_sheet(token: str, sname: str) -> list[dict]:
-    """시트 A:G 읽어서 dict 리스트 반환."""
+    """시트 A:L 읽어서 dict 리스트 반환."""
     r = requests.get(
-        f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}/values/{sname}!A:G",
+        f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}/values/{sname}!A:L",
         headers={"Authorization": f"Bearer {token}"},
         timeout=15,
     )
@@ -101,12 +106,17 @@ def read_sheet(token: str, sname: str) -> list[dict]:
         if not name:
             continue
         result.append({
-            "korean_name":  name,
-            "english_name": cell(row, "english_name"),
-            "image_url":    cell(row, "image_url"),
-            "ingredients":  cell(row, "ingredients"),
-            "instructions": cell(row, "instructions"),
-            "memo":         cell(row, "memo"),
+            "korean_name":     name,
+            "english_name":    cell(row, "english_name"),
+            "image_url":       cell(row, "image_url"),
+            "ingredients":     cell(row, "ingredients"),
+            "instructions":    cell(row, "instructions"),
+            "memo":            cell(row, "memo"),
+            "seo_description": cell(row, "seo_description"),
+            "calories":        cell(row, "calories"),
+            "carbs":           cell(row, "carbs"),
+            "protein":         cell(row, "protein"),
+            "fat":             cell(row, "fat"),
         })
     return result
 
@@ -189,17 +199,29 @@ def upsert_recipe(row: dict):
     instructions_json = json.dumps(parse_instructions(row["instructions"]), ensure_ascii=False) \
         if row["instructions"] else None
 
+    # 영양정보 JSON 구성
+    nutrition = {}
+    if row.get("calories"):  nutrition["calories"] = row["calories"]
+    if row.get("carbs"):     nutrition["carbs"] = row["carbs"]
+    if row.get("protein"):   nutrition["protein"] = row["protein"]
+    if row.get("fat"):       nutrition["fat"] = row["fat"]
+    nutrition_json = json.dumps(nutrition, ensure_ascii=False) if nutrition else None
+
+    seo_desc = row.get("seo_description", "")
+
     # INSERT: 신규면 전부 저장
-    # UPDATE: 값이 있는 필드만 덮어씀 (빈 값이면 COALESCE로 기존값 유지)
+    # UPDATE: 값이 있는 필드만 덮어씀 (빈 값이면 기존값 유지)
     d1_query(
         """
-        INSERT INTO recipes (korean_name, english_name, image_url, english_ingredients, instructions, seo_description)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO recipes (korean_name, english_name, image_url, english_ingredients, instructions, seo_description, nutrition_info)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(korean_name) DO UPDATE SET
             english_name        = CASE WHEN ? != '' THEN ? ELSE recipes.english_name END,
             image_url           = CASE WHEN ? != '' THEN ? ELSE recipes.image_url END,
             english_ingredients = CASE WHEN ? IS NOT NULL THEN ? ELSE recipes.english_ingredients END,
-            instructions        = CASE WHEN ? IS NOT NULL THEN ? ELSE recipes.instructions END
+            instructions        = CASE WHEN ? IS NOT NULL THEN ? ELSE recipes.instructions END,
+            seo_description     = CASE WHEN ? != '' THEN ? ELSE recipes.seo_description END,
+            nutrition_info      = CASE WHEN ? IS NOT NULL THEN ? ELSE recipes.nutrition_info END
         """,
         [
             # INSERT 값
@@ -208,15 +230,15 @@ def upsert_recipe(row: dict):
             row["image_url"],
             ingredients_json or "[]",
             instructions_json or "[]",
-            "",  # seo_description 초기값
-            # UPDATE 조건 + 값 (english_name)
-            row["english_name"], row["english_name"],
-            # UPDATE 조건 + 값 (image_url)
-            row["image_url"], row["image_url"],
-            # UPDATE 조건 + 값 (ingredients)
-            ingredients_json, ingredients_json,
-            # UPDATE 조건 + 값 (instructions)
-            instructions_json, instructions_json,
+            seo_desc,
+            nutrition_json or "{}",
+            # UPDATE 조건 + 값
+            row["english_name"],    row["english_name"],
+            row["image_url"],       row["image_url"],
+            ingredients_json,       ingredients_json,
+            instructions_json,      instructions_json,
+            seo_desc,               seo_desc,
+            nutrition_json,         nutrition_json,
         ],
     )
 
@@ -235,7 +257,7 @@ def main():
         try:
             upsert_recipe(row)
             # 변경 여부 판단용 로그
-            has_data = any([row["english_name"], row["image_url"], row["ingredients"], row["instructions"]])
+            has_data = any([row["english_name"], row["image_url"], row["ingredients"], row["instructions"], row.get("seo_description"), row.get("calories")])
             if has_data:
                 logger.info(f"동기화: {name} | 영어명={'✅' if row['english_name'] else '—'} "
                             f"이미지={'✅' if row['image_url'] else '—'} "

@@ -151,10 +151,18 @@ def _parse_instructions(text: str) -> list:
 
 def upsert_recipe_to_d1(korean_name: str, fields: dict):
     """변경된 필드만 D1 recipes 테이블에 upsert. 빈 값은 기존값 유지."""
-    english_name   = fields.get("english_name", "")
-    image_url      = fields.get("image_url", "")
-    ingredients_tx = fields.get("ingredients", "")
+    english_name    = fields.get("english_name", "")
+    image_url       = fields.get("image_url", "")
+    ingredients_tx  = fields.get("ingredients", "")
     instructions_tx = fields.get("instructions", "")
+    seo_description = fields.get("seo_description", "")
+
+    # 영양정보 JSON 조합
+    nutrition = {}
+    for key in ("calories", "carbs", "protein", "fat"):
+        if fields.get(key):
+            nutrition[key] = fields[key]
+    nutrition_json = json.dumps(nutrition, ensure_ascii=False) if nutrition else None
 
     ingredients_json  = json.dumps(_parse_ingredients(ingredients_tx), ensure_ascii=False) \
         if ingredients_tx else None
@@ -163,21 +171,27 @@ def upsert_recipe_to_d1(korean_name: str, fields: dict):
 
     _d1_query(
         """
-        INSERT INTO recipes (korean_name, english_name, image_url, english_ingredients, instructions, seo_description)
-        VALUES (?, ?, ?, ?, ?, '')
+        INSERT INTO recipes (korean_name, english_name, image_url, english_ingredients, instructions, seo_description, nutrition_info)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(korean_name) DO UPDATE SET
             english_name        = CASE WHEN ? != '' THEN ? ELSE recipes.english_name END,
             image_url           = CASE WHEN ? != '' THEN ? ELSE recipes.image_url END,
             english_ingredients = CASE WHEN ? IS NOT NULL THEN ? ELSE recipes.english_ingredients END,
-            instructions        = CASE WHEN ? IS NOT NULL THEN ? ELSE recipes.instructions END
+            instructions        = CASE WHEN ? IS NOT NULL THEN ? ELSE recipes.instructions END,
+            seo_description     = CASE WHEN ? != '' THEN ? ELSE recipes.seo_description END,
+            nutrition_info      = CASE WHEN ? IS NOT NULL THEN ? ELSE recipes.nutrition_info END
         """,
         [
             korean_name, english_name, image_url,
             ingredients_json or "[]", instructions_json or "[]",
+            seo_description, nutrition_json or "{}",
+            # UPDATE 값
             english_name, english_name,
             image_url, image_url,
             ingredients_json, ingredients_json,
             instructions_json, instructions_json,
+            seo_description, seo_description,
+            nutrition_json, nutrition_json,
         ]
     )
     logger.info(f"D1 upsert 완료: {korean_name}")
@@ -216,11 +230,11 @@ def _sheet_name(token: str) -> str:
     return sheets[0]["properties"]["title"] if sheets else "Sheet1"
 
 def get_sheet_data() -> list[dict]:
-    """시트 A:G 읽기"""
+    """시트 A:L 읽기"""
     token = _get_token("https://www.googleapis.com/auth/spreadsheets.readonly")
     sname = _sheet_name(token)
     r = requests.get(
-        f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}/values/{sname}!A:G",
+        f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}/values/{sname}!A:L",
         headers={"Authorization": f"Bearer {token}"},
         timeout=15,
     )
@@ -242,30 +256,41 @@ def get_sheet_data() -> list[dict]:
         if not name:
             continue
         result.append({
-            "row":          i,
-            "korean_name":  name,
-            "english_name": col(row, "english_name"),
-            "image_url":    col(row, "image_url"),
-            "ingredients":  col(row, "ingredients"),
-            "instructions": col(row, "instructions"),
-            "memo":         col(row, "memo"),
+            "row":             i,
+            "korean_name":     name,
+            "english_name":    col(row, "english_name"),
+            "image_url":       col(row, "image_url"),
+            "ingredients":     col(row, "ingredients"),
+            "instructions":    col(row, "instructions"),
+            "memo":            col(row, "memo"),
+            "seo_description": col(row, "seo_description"),
+            "calories":        col(row, "calories"),
+            "carbs":           col(row, "carbs"),
+            "protein":         col(row, "protein"),
+            "fat":             col(row, "fat"),
         })
     return result
 
 def update_sheet_row(row: int, fields: dict):
     """시트 한 행의 여러 컬럼을 한번에 업데이트.
-    컬럼: B=english_name, C=image_url, D=미리보기, E=ingredients, F=instructions, G=memo
+    컬럼: B=english_name, C=image_url, D=미리보기, E=ingredients, F=instructions,
+          G=memo, H=seo_description, I=calories, J=carbs, K=protein, L=fat
     """
     token = _get_token("https://www.googleapis.com/auth/spreadsheets")
     sname = _sheet_name(token)
 
     data = []
     col_map = {
-        "english_name": f"{sname}!B{row}",
-        "image_url":    f"{sname}!C{row}",
-        "ingredients":  f"{sname}!E{row}",
-        "instructions": f"{sname}!F{row}",
-        "memo":         f"{sname}!G{row}",
+        "english_name":    f"{sname}!B{row}",
+        "image_url":       f"{sname}!C{row}",
+        "ingredients":     f"{sname}!E{row}",
+        "instructions":    f"{sname}!F{row}",
+        "memo":            f"{sname}!G{row}",
+        "seo_description": f"{sname}!H{row}",
+        "calories":        f"{sname}!I{row}",
+        "carbs":           f"{sname}!J{row}",
+        "protein":         f"{sname}!K{row}",
+        "fat":             f"{sname}!L{row}",
     }
     for key, range_ in col_map.items():
         if key in fields:
@@ -340,7 +365,8 @@ def api_update_recipe(row):
         if not body:
             return jsonify({"ok": False, "error": "데이터 없음"}), 400
 
-        allowed = {"english_name", "ingredients", "instructions", "memo"}
+        allowed = {"english_name", "ingredients", "instructions", "memo",
+                   "seo_description", "calories", "carbs", "protein", "fat"}
         fields = {k: v for k, v in body.items() if k in allowed}
         if not fields:
             return jsonify({"ok": False, "error": "저장할 필드 없음"}), 400
