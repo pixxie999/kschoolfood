@@ -702,7 +702,7 @@ async function loadMeals() {
   loading.innerHTML = '<p class="text-3xl mb-2">⏳</p><p class="text-gray-400">불러오는 중...</p>';
 
   try {
-    const res  = await fetch('/api/meals?days=14');
+    const res  = await fetch('/api/meals?days=28');
     const data = await res.json();
     if (!data.ok) throw new Error(data.error);
 

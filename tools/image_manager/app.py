@@ -705,7 +705,7 @@ def _extract_nutrition_by_label_from_text(text: str, result: dict):
 def api_meals():
     """최근 N일 meal_trays 조회"""
     try:
-        days = int(request.args.get("days", 14))
+        days = int(request.args.get("days", 28))
         result = _d1_query(
             f"SELECT date, rice, soup, side1, side2, side3, calories FROM meal_trays "
             f"ORDER BY date DESC LIMIT {days}"
