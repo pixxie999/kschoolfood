@@ -13,6 +13,7 @@ from botocore.config import Config
 import requests
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
+from bs4 import BeautifulSoup
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -427,6 +428,334 @@ def api_upload():
     except Exception as e:
         logger.error(f"업로드 오류: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
+
+# ── HTML 레시피 파서 ───────────────────────────────────────────────────────
+
+# 섹션 헤딩 키워드 분류
+_HEADING_EN_INGR    = re.compile(r'ingredients?\s*[\(\|/]?\s*en', re.I)
+_HEADING_KR_INGR    = re.compile(r'(재료|ingredients?\s*[\(\|/]?\s*kr|ingredients?\s*[\(\|/]?\s*korean)', re.I)
+_HEADING_INGR_MIXED = re.compile(r'^ingredients?\s*/\s*재료$', re.I)
+_HEADING_INGR_ONLY  = re.compile(r'^ingredients?$', re.I)
+_HEADING_EN_INST    = re.compile(r'(instructions?\s*[\(\|/]?\s*en|recipe\s*steps?|step[\-\s]by[\-\s]step\s*[\(\|/]?\s*en|cooking\s*instructions?|preparation\s*steps?)', re.I)
+_HEADING_KR_INST    = re.compile(r'(조리\s*순서|만드는\s*법|조리법)', re.I)
+_HEADING_INST_MIXED = re.compile(r'preparation\s*steps?\s*/\s*조리', re.I)
+_HEADING_INST_ONLY  = re.compile(r'^instructions?$', re.I)
+_HEADING_NUTRITION  = re.compile(r'(nutrition|macro)', re.I)
+
+# 영양소 레이블 → 키
+_NUTRITION_MAP = {
+    re.compile(r'calorie', re.I): 'calories',
+    re.compile(r'carb', re.I):    'carbs',
+    re.compile(r'protein', re.I): 'protein',
+    re.compile(r'fat', re.I):     'fat',
+}
+
+
+def _tag_text(tag) -> str:
+    """태그의 plain text를 반환 (태그 이름 포함 안 함)."""
+    return tag.get_text(separator=' ', strip=True) if tag else ''
+
+
+def _list_items(container) -> list[str]:
+    """ul/ol 안의 li 텍스트 목록 반환. li 없으면 p 태그 사용."""
+    items = []
+    lis = container.find_all('li')
+    if lis:
+        for li in lis:
+            t = li.get_text(' ', strip=True)
+            if t:
+                items.append(t)
+    else:
+        for p in container.find_all('p'):
+            t = p.get_text(' ', strip=True)
+            if t:
+                items.append(t)
+    return items
+
+
+def _siblings_until_next_heading(tag):
+    """헤딩 태그 다음에 오는 형제 요소들을 다음 헤딩 전까지 수집."""
+    elements = []
+    for sib in tag.find_next_siblings():
+        if sib.name in ('h1','h2','h3','h4','h5','h6','hr'):
+            break
+        elements.append(sib)
+    return elements
+
+
+def _extract_items_from_siblings(siblings) -> list[str]:
+    """형제 요소 목록에서 텍스트 항목 추출 (ul/ol/li/p 처리)."""
+    items = []
+    for el in siblings:
+        if el.name in ('ul', 'ol'):
+            items.extend(_list_items(el))
+        elif el.name in ('p', 'div', 'li'):
+            t = el.get_text(' ', strip=True)
+            if t:
+                items.append(t)
+    return items
+
+
+def _strip_step_prefix(text: str) -> str:
+    """조리법 줄 앞의 번호/레이블 제거."""
+    text = re.sub(r'^\d+\.\s*', '', text)
+    text = re.sub(r'^[①②③④⑤⑥⑦⑧⑨⑩]\s*', '', text)
+    return text.strip()
+
+
+def parse_html_recipe(html: str) -> dict:
+    """
+    비규격 HTML에서 레시피 데이터 추출.
+    반환 키: english_name, image_url, ingredients, instructions,
+             seo_description, calories, carbs, protein, fat
+    """
+    soup = BeautifulSoup(html, 'html.parser')
+
+    result = {
+        'english_name':    '',
+        'image_url':       '',
+        'ingredients':     '',
+        'instructions':    '',
+        'seo_description': '',
+        'calories':        '',
+        'carbs':           '',
+        'protein':         '',
+        'fat':             '',
+    }
+
+    # ── 영어 이름 ────────────────────────────────────────────────────────────
+    # h1 → title 순으로 시도, 한국어 제거
+    h1 = soup.find('h1')
+    if h1:
+        text = h1.get_text(' ', strip=True)
+        # 한국어 부분 제거 (괄호 포함)
+        text = re.sub(r'[가-힣]+.*', '', text).strip()
+        # 남은 특수문자 정리
+        text = re.sub(r'\s*[\(\[\|].*', '', text).strip()
+        if text:
+            result['english_name'] = text
+    if not result['english_name']:
+        title_tag = soup.find('title')
+        if title_tag:
+            text = title_tag.get_text(' ', strip=True)
+            text = re.sub(r'[\|–\-].*', '', text).strip()
+            text = re.sub(r'recipe$', '', text, flags=re.I).strip()
+            result['english_name'] = text
+
+    # ── 이미지 URL ──────────────────────────────────────────────────────────
+    # opal.google 이미지 또는 첫 번째 <img>
+    for img in soup.find_all('img'):
+        src = img.get('src', '')
+        if src and not src.startswith('data:'):
+            result['image_url'] = src
+            break
+
+    # ── SEO 설명 (인용구/이탤릭) ─────────────────────────────────────────────
+    for tag in soup.find_all(['blockquote', 'p']):
+        text = tag.get_text(' ', strip=True)
+        # 따옴표로 감싸진 짧은 문장
+        if re.match(r'^["""\'\'\'"]', text) and 20 < len(text) < 250:
+            result['seo_description'] = text.strip('"\'"\'"\'')
+            break
+    # blockquote가 없으면 italic
+    if not result['seo_description']:
+        for tag in soup.find_all(['em', 'i']):
+            text = tag.get_text(' ', strip=True)
+            if 20 < len(text) < 250:
+                result['seo_description'] = text
+                break
+
+    # ── 재료 ─────────────────────────────────────────────────────────────────
+    en_ingr_lines: list[str] = []
+    kr_ingr_lines: list[str] = []
+
+    headings = soup.find_all(['h1','h2','h3','h4','h5','h6'])
+    for hd in headings:
+        htext = hd.get_text(' ', strip=True)
+        siblings = _siblings_until_next_heading(hd)
+        items = _extract_items_from_siblings(siblings)
+
+        if _HEADING_INGR_MIXED.search(htext):
+            # 혼합 헤딩: 전체를 영어 섹션으로 취급 (EN/KR 분리 어려움)
+            en_ingr_lines.extend(items)
+        elif _HEADING_EN_INGR.search(htext) or _HEADING_INGR_ONLY.search(htext):
+            en_ingr_lines.extend(items)
+        elif _HEADING_KR_INGR.search(htext):
+            kr_ingr_lines.extend(items)
+
+    # 헤딩 기반 추출 실패 시 → class/text 기반으로 재탐색
+    if not en_ingr_lines and not kr_ingr_lines:
+        for ul in soup.find_all(['ul','ol']):
+            prev = ul.find_previous(['h1','h2','h3','h4','p','span'])
+            if prev:
+                ptext = prev.get_text(' ', strip=True).lower()
+                if 'ingredient' in ptext:
+                    items = _list_items(ul)
+                    if re.search(r'[가-힣]', ptext):
+                        kr_ingr_lines.extend(items)
+                    else:
+                        en_ingr_lines.extend(items)
+
+    # 재료 텍스트 조합 (EN → KR)
+    parts = []
+    if en_ingr_lines:
+        parts.append('\n'.join(en_ingr_lines))
+    if kr_ingr_lines:
+        if parts:
+            parts.append('\n[재료]\n' + '\n'.join(kr_ingr_lines))
+        else:
+            parts.append('\n'.join(kr_ingr_lines))
+    result['ingredients'] = '\n'.join(parts)
+
+    # ── 조리법 ───────────────────────────────────────────────────────────────
+    en_inst_lines: list[str] = []
+    kr_inst_lines: list[str] = []
+
+    for hd in headings:
+        htext = hd.get_text(' ', strip=True)
+        siblings = _siblings_until_next_heading(hd)
+        items = _extract_items_from_siblings(siblings)
+        # 조리법은 ol 우선
+        ol = hd.find_next('ol')
+        if ol:
+            # ol이 다음 헤딩 전인지 확인
+            ol_items = _list_items(ol)
+            if ol_items and len(ol_items) > len(items):
+                items = ol_items
+
+        if _HEADING_INST_MIXED.search(htext):
+            en_inst_lines.extend([_strip_step_prefix(t) for t in items])
+        elif _HEADING_EN_INST.search(htext) or _HEADING_INST_ONLY.search(htext):
+            en_inst_lines.extend([_strip_step_prefix(t) for t in items])
+        elif _HEADING_KR_INST.search(htext):
+            kr_inst_lines.extend([_strip_step_prefix(t) for t in items])
+
+    parts = []
+    if en_inst_lines:
+        parts.append('\n'.join(en_inst_lines))
+    if kr_inst_lines:
+        if parts:
+            parts.append('\n[조리법]\n' + '\n'.join(kr_inst_lines))
+        else:
+            parts.append('\n'.join(kr_inst_lines))
+    result['instructions'] = '\n'.join(parts)
+
+    # ── 영양 정보 ─────────────────────────────────────────────────────────────
+    # 전략 1: 헤딩으로 구분된 영양 섹션
+    for hd in headings:
+        if _HEADING_NUTRITION.search(hd.get_text(' ', strip=True)):
+            container = hd.find_next(['div','section','table'])
+            if container:
+                _extract_nutrition_from_container(container, result)
+            break
+
+    # 전략 2: "Calories", "Carbs" 등 레이블 텍스트로 탐색
+    if not any(result[k] for k in ('calories','carbs','protein','fat')):
+        _extract_nutrition_by_label(soup, result)
+
+    return result
+
+
+def _extract_nutrition_from_container(container, result: dict):
+    """영양 섹션 컨테이너에서 수치 추출."""
+    text = container.get_text(' ', strip=True)
+    _extract_nutrition_by_label_from_text(text, result)
+
+
+def _extract_nutrition_by_label(soup, result: dict):
+    """전체 문서에서 영양소 레이블과 근처 수치를 찾아 추출."""
+    for label_re, key in _NUTRITION_MAP.items():
+        if result[key]:
+            continue
+        for tag in soup.find_all(string=label_re):
+            # 근처(부모/형제)에서 숫자 찾기
+            parent = tag.parent
+            if parent:
+                # 다음 형제 텍스트에서 숫자 추출
+                for sib in list(parent.next_siblings)[:3]:
+                    t = sib if isinstance(sib, str) else getattr(sib, 'get_text', lambda: '')()
+                    m = re.search(r'([\d.]+\s*(?:kcal|g|mg)?)', str(t), re.I)
+                    if m:
+                        result[key] = m.group(1).strip()
+                        break
+                # 형제에서 못 찾으면 부모의 다음 형제
+                if not result[key]:
+                    for sib in list(parent.parent.next_siblings if parent.parent else [])[:3]:
+                        t = getattr(sib, 'get_text', lambda sep, strip: '')(' ', True)
+                        m = re.search(r'([\d.]+\s*(?:kcal|g|mg)?)', t, re.I)
+                        if m:
+                            result[key] = m.group(1).strip()
+                            break
+
+
+def _extract_nutrition_by_label_from_text(text: str, result: dict):
+    """텍스트 블록에서 'Calories 320kcal' 형태 파싱."""
+    for label_re, key in _NUTRITION_MAP.items():
+        if result[key]:
+            continue
+        m = re.search(label_re.pattern + r'\s*[:\-]?\s*([\d.]+\s*(?:kcal|g|mg)?)', text, re.I)
+        if m:
+            result[key] = m.group(1).strip()
+
+
+# ── HTML Import 엔드포인트 ─────────────────────────────────────────────────
+
+@app.route("/api/import-html", methods=["POST"])
+@login_required
+def api_import_html():
+    """
+    HTML 파일에서 레시피 파싱 + 이미지 다운로드 → R2 업로드.
+    반환: 파싱된 필드들 (저장은 안 함 — 사용자 확인 후 /api/recipe/<row>로 저장)
+    """
+    try:
+        file        = request.files.get("html_file")
+        row         = int(request.form.get("row", 0))
+        korean_name = request.form.get("korean_name", "")
+
+        if not file:
+            return jsonify({"ok": False, "error": "HTML 파일이 없습니다."}), 400
+
+        html_content = file.read().decode("utf-8", errors="ignore")
+        parsed = parse_html_recipe(html_content)
+
+        # 이미지 다운로드 → WebP 변환 → R2 업로드
+        img_result = {}
+        if parsed.get("image_url"):
+            try:
+                resp = requests.get(parsed["image_url"], timeout=20, headers={
+                    "User-Agent": "Mozilla/5.0"
+                })
+                resp.raise_for_status()
+                original_bytes = resp.content
+                webp_bytes = convert_to_webp(original_bytes)
+
+                name_hash = hashlib.md5(korean_name.encode()).hexdigest()[:16] if korean_name \
+                            else hashlib.md5(parsed["image_url"].encode()).hexdigest()[:16]
+                filename = f"recipes/{name_hash}.webp"
+                public_url = upload_to_r2(webp_bytes, filename)
+
+                parsed["image_url"] = public_url
+                img_result = {
+                    "original_kb": len(original_bytes) // 1024,
+                    "webp_kb":     len(webp_bytes) // 1024,
+                    "url":         public_url,
+                }
+                logger.info(f"HTML import 이미지 업로드: {korean_name} → {public_url}")
+            except Exception as img_err:
+                logger.warning(f"HTML import 이미지 업로드 실패: {img_err}")
+                parsed["image_url"] = ""  # 이미지 실패 시 빈값
+                img_result = {"error": str(img_err)}
+
+        return jsonify({
+            "ok":         True,
+            "parsed":     parsed,
+            "img_result": img_result,
+        })
+
+    except Exception as e:
+        logger.error(f"HTML import 오류: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 
 if __name__ == "__main__":
     print("=" * 50)

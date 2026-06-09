@@ -97,6 +97,26 @@
           class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 mt-1 focus:outline-none focus:ring-2 focus:ring-orange-300">
       </div>
 
+      <!-- HTML 가져오기 -->
+      <div class="bg-blue-50 rounded-xl border border-blue-200 p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <p class="field-label text-blue-800">📄 HTML 파일에서 자동 가져오기</p>
+          <span class="text-xs text-blue-500">영어명·재료·조리법·영양정보 자동 파싱</span>
+        </div>
+        <div id="html-drop-zone"
+          class="border-2 border-dashed border-blue-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-100 transition-colors"
+          onclick="document.getElementById('html-file-input').click()"
+          ondragover="htmlDragOver(event)" ondragleave="htmlDragLeave(event)" ondrop="htmlDropFile(event)">
+          <p class="text-xl mb-1">📂</p>
+          <p class="text-sm text-blue-700 font-semibold">HTML 파일을 드래그하거나 클릭하여 선택</p>
+          <p class="text-xs text-blue-400 mt-1">파싱 후 미리보기 — 저장 전 수정 가능</p>
+          <input id="html-file-input" type="file" accept=".html,.htm" class="hidden"
+                 onchange="importHtmlFile(this.files[0])">
+        </div>
+        <!-- 파싱 진행 상태 -->
+        <div id="html-import-status" class="hidden text-sm text-center py-2"></div>
+      </div>
+
       <!-- 이미지 -->
       <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
         <p class="field-label">대표 이미지</p>
@@ -491,6 +511,88 @@ document.addEventListener('keydown', e => {
     if (selectedRecipe) saveRecipe();
   }
 });
+
+// ── HTML 파일 가져오기 ────────────────────────────────────────────────────
+function htmlDragOver(e) {
+  e.preventDefault();
+  document.getElementById('html-drop-zone').classList.add('border-blue-500','bg-blue-100');
+}
+function htmlDragLeave(e) {
+  document.getElementById('html-drop-zone').classList.remove('border-blue-500','bg-blue-100');
+}
+function htmlDropFile(e) {
+  e.preventDefault();
+  htmlDragLeave(e);
+  const file = e.dataTransfer.files[0];
+  if (file) importHtmlFile(file);
+}
+
+async function importHtmlFile(file) {
+  if (!selectedRecipe) {
+    alert('먼저 왼쪽 목록에서 메뉴를 선택하세요.');
+    return;
+  }
+  if (!file || !file.name.match(/\.html?$/i)) {
+    alert('.html 파일만 가능합니다.');
+    return;
+  }
+
+  const statusEl = document.getElementById('html-import-status');
+  statusEl.classList.remove('hidden');
+  statusEl.className = 'text-sm text-center py-2 text-blue-600';
+  statusEl.textContent = '⏳ 파싱 중... 이미지 다운로드 및 R2 업로드 진행 중';
+
+  try {
+    const form = new FormData();
+    form.append('html_file', file);
+    form.append('row', selectedRecipe.row);
+    form.append('korean_name', selectedRecipe.korean_name);
+
+    const res  = await fetch('/api/import-html', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+
+    const p = data.parsed;
+
+    // 파싱된 값으로 필드 채우기 (비어있지 않은 것만)
+    if (p.english_name)    document.getElementById('f-english').value        = p.english_name;
+    if (p.ingredients)     document.getElementById('f-ingredients').value    = p.ingredients;
+    if (p.instructions)    document.getElementById('f-instructions').value   = p.instructions;
+    if (p.seo_description) document.getElementById('f-seo-description').value= p.seo_description;
+    if (p.calories)        document.getElementById('f-calories').value       = p.calories;
+    if (p.carbs)           document.getElementById('f-carbs').value          = p.carbs;
+    if (p.protein)         document.getElementById('f-protein').value        = p.protein;
+    if (p.fat)             document.getElementById('f-fat').value            = p.fat;
+
+    // 이미지 미리보기 업데이트
+    if (p.image_url) {
+      document.getElementById('img-preview-wrap').innerHTML =
+        `<img src="${p.image_url}" class="img-thumb" onerror="imgError(this)">`;
+      document.getElementById('img-url-text').textContent = p.image_url;
+      // 캐시에도 반영
+      selectedRecipe.image_url = p.image_url;
+      allRecipes = allRecipes.map(r => r.row === selectedRecipe.row ? {...r, image_url: p.image_url} : r);
+      filterRecipes();
+    }
+
+    // 결과 요약
+    const imgInfo = data.img_result?.url
+      ? `이미지: ${data.img_result.original_kb}KB → ${data.img_result.webp_kb}KB (R2 업로드 완료)`
+      : data.img_result?.error
+        ? `이미지 업로드 실패: ${data.img_result.error}`
+        : '이미지 없음';
+
+    statusEl.className = 'text-sm text-center py-2 text-green-600 font-semibold';
+    statusEl.textContent = `✅ 파싱 완료! ${imgInfo} — 내용을 확인하고 💾 저장 버튼을 눌러주세요.`;
+
+    // 인풋 초기화
+    document.getElementById('html-file-input').value = '';
+
+  } catch(e) {
+    statusEl.className = 'text-sm text-center py-2 text-red-500';
+    statusEl.textContent = '❌ 파싱 실패: ' + e.message;
+  }
+}
 
 loadRecipes();
 </script>
