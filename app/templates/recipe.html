@@ -82,6 +82,27 @@
         {% endif %}
     </div>
 
+    <!-- Category / Tag 배지 -->
+    {% if recipe.category or recipe.tags %}
+    <div class="flex flex-wrap gap-2 -mt-4">
+      {% if recipe.category %}
+      <a href="/recipes?category={{ recipe.category }}"
+         class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-700 hover:bg-orange-200 transition-colors">
+        {{ recipe.category | replace('_', ' ') | title }}
+      </a>
+      {% endif %}
+      {% if recipe.tags %}
+      {% set tags_list = recipe.tags | tojson | replace('[','') | replace(']','') | replace('"','') %}
+      {% for tag in (recipe.tags | from_json) %}
+      <a href="/recipes?tag={{ tag }}"
+         class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-orange-50 hover:text-orange-600 transition-colors">
+        #{{ tag }}
+      </a>
+      {% endfor %}
+      {% endif %}
+    </div>
+    {% endif %}
+
     <!-- 소셜 공유 버튼 -->
     <div class="flex items-center space-x-2 flex-wrap gap-2">
         <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Share:</span>

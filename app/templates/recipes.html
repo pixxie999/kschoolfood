@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}Browse Korean School Lunch Recipes | K-School Food{% endblock %}
+{% block meta_desc %}Explore all Korean school lunch recipes by category — rice dishes, soups, stir-fry, kimchi, and more. Filter by tag to find quick, vegetarian, or kid-friendly dishes.{% endblock %}
+{% block canonical %}https://kschoolfood.com/recipes{% endblock %}
+{% block og_title %}Browse Korean School Lunch Recipes | K-School Food{% endblock %}
+{% block og_url %}https://kschoolfood.com/recipes{% endblock %}
+
+{% block head_extra %}
+<style>
+  .recipe-card img { transition: transform 0.3s ease; }
+  .recipe-card:hover img { transform: scale(1.05); }
+  .tag-pill { transition: background 0.15s; }
+  .filter-active { background: #f97316; color: #fff; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <h1 class="font-outfit font-extrabold text-2xl text-gray-800 mb-1">All Recipes</h1>
+  <p class="text-sm text-gray-500">{{ total }} recipes found
+    {% if category %} · <span class="text-orange-500">{{ category | replace('_', ' ') | title }}</span>{% endif %}
+    {% if tag %} · <span class="text-orange-500">#{{ tag }}</span>{% endif %}
+  </p>
+</div>
+
+<!-- Category filter bar -->
+<div class="flex flex-wrap gap-2 mb-5">
+  <a href="/recipes" class="tag-pill px-3 py-1 rounded-full text-sm font-medium border border-gray-200
+    {% if not category %}filter-active{% else %}bg-white text-gray-600 hover:bg-orange-50{% endif %}">
+    All
+  </a>
+  {% for cat in categories %}
+  <a href="/recipes?category={{ cat.category }}" class="tag-pill px-3 py-1 rounded-full text-sm font-medium border border-gray-200
+    {% if category == cat.category %}filter-active{% else %}bg-white text-gray-600 hover:bg-orange-50{% endif %}">
+    {{ cat.category | replace('_', ' ') | title }}
+    <span class="ml-1 text-xs opacity-70">({{ cat.cnt }})</span>
+  </a>
+  {% endfor %}
+</div>
+
+<!-- Tag filter chips (common useful tags) -->
+{% set common_tags = [
+  ("quick", "⚡ Quick"),
+  ("vegetarian", "🥦 Vegetarian"),
+  ("kid_friendly", "👦 Kid Friendly"),
+  ("high_protein", "💪 High Protein"),
+  ("meal_prep", "📦 Meal Prep"),
+  ("gluten_free", "🌾 Gluten Free"),
+  ("spicy_2", "🌶 Medium Spicy"),
+  ("spicy_3", "🔥 Hot"),
+] %}
+<div class="flex flex-wrap gap-2 mb-6">
+  {% for tag_key, tag_label in common_tags %}
+  <a href="/recipes?{% if category %}category={{ category }}&{% endif %}tag={{ tag_key }}"
+     class="tag-pill px-3 py-1 rounded-full text-xs font-medium border border-gray-200
+     {% if tag == tag_key %}bg-orange-100 border-orange-300 text-orange-700{% else %}bg-gray-50 text-gray-500 hover:bg-orange-50{% endif %}">
+    {{ tag_label }}
+  </a>
+  {% endfor %}
+  {% if tag %}
+  <a href="/recipes?{% if category %}category={{ category }}{% endif %}" class="tag-pill px-3 py-1 rounded-full text-xs font-medium bg-red-50 border border-red-200 text-red-500 hover:bg-red-100">
+    ✕ Clear tag
+  </a>
+  {% endif %}
+</div>
+
+<!-- Recipe grid -->
+{% if recipes %}
+<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-8">
+  {% for recipe in recipes %}
+  <a href="/recipe/{{ recipe.id }}" class="recipe-card bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-gray-100 block">
+    <div class="relative aspect-square overflow-hidden bg-gray-100">
+      {% if recipe.image_url %}
+      <img src="{{ recipe.image_url }}" alt="{{ recipe.english_name }}"
+           class="w-full h-full object-cover"
+           loading="lazy"
+           onerror="imgError(this)">
+      {% else %}
+      <div class="w-full h-full flex items-center justify-center text-4xl bg-gradient-to-br from-orange-50 to-amber-50">🍱</div>
+      {% endif %}
+      {% if recipe.category %}
+      <span class="absolute top-1.5 left-1.5 bg-black/50 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full backdrop-blur-sm">
+        {{ recipe.category | replace('_', ' ') | title }}
+      </span>
+      {% endif %}
+    </div>
+    <div class="p-2.5">
+      <p class="text-xs font-semibold text-gray-800 line-clamp-1 leading-snug">{{ recipe.english_name }}</p>
+      <p class="text-[10px] text-gray-400 mt-0.5 line-clamp-1">{{ recipe.korean_name }}</p>
+      {% if recipe.tags_list %}
+      <div class="flex flex-wrap gap-1 mt-1.5">
+        {% for t in recipe.tags_list[:2] %}
+        <span class="text-[9px] bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded-full">#{{ t }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div class="flex justify-center items-center gap-2 mt-6">
+  {% if page > 1 %}
+  <a href="/recipes?{% if category %}category={{ category }}&{% endif %}{% if tag %}tag={{ tag }}&{% endif %}page={{ page - 1 }}"
+     class="px-3 py-1.5 rounded-lg border border-gray-200 text-sm hover:bg-orange-50">← Prev</a>
+  {% endif %}
+  <span class="text-sm text-gray-500">Page {{ page }} / {{ total_pages }}</span>
+  {% if page < total_pages %}
+  <a href="/recipes?{% if category %}category={{ category }}&{% endif %}{% if tag %}tag={{ tag }}&{% endif %}page={{ page + 1 }}"
+     class="px-3 py-1.5 rounded-lg border border-gray-200 text-sm hover:bg-orange-50">Next →</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="text-center py-16 text-gray-400">
+  <div class="text-5xl mb-3">🔍</div>
+  <p class="font-semibold">No recipes found</p>
+  <p class="text-sm mt-1">Try a different category or tag</p>
+  <a href="/recipes" class="inline-block mt-4 text-orange-500 text-sm hover:underline">Clear all filters</a>
+</div>
+{% endif %}
+
+<script>
+function imgError(el) {
+  if (el.dataset.errored) return;
+  el.dataset.errored = '1';
+  el.onerror = null;
+  el.style.display = 'none';
+  const ph = document.createElement('div');
+  ph.className = 'w-full h-full flex items-center justify-center text-4xl bg-gradient-to-br from-orange-50 to-amber-50';
+  ph.textContent = '🍱';
+  el.parentNode.insertBefore(ph, el);
+}
+</script>
+{% endblock %}

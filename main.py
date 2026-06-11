@@ -24,6 +24,14 @@ from app.services.affiliate import match_affiliate_links, get_tray_affiliate_lin
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 jinja_env = Environment(loader=FileSystemLoader(os.path.join(BASE_DIR, "app", "templates")))
 
+def _from_json(value):
+    try:
+        return json.loads(value) if isinstance(value, str) else (value or [])
+    except Exception:
+        return []
+
+jinja_env.filters["from_json"] = _from_json
+
 def get_korean_today() -> str:
     kst = timezone(timedelta(hours=9))
     return datetime.now(kst).strftime("%Y%m%d")
@@ -73,6 +81,20 @@ def _build_dishes(meal: dict, allergies: dict) -> list:
         if meal.get(key, "") not in SKIP
     ]
 
+async def _fetch_recipes_batch(ko_names: list, db) -> dict:
+    """여러 메뉴명을 한 번의 IN 쿼리로 조회 — D1 reads 대폭 절약"""
+    if not ko_names:
+        return {}
+    placeholders = ",".join("?" * len(ko_names))
+    rows = await db.fetch_all(
+        f"SELECT id, korean_name, english_name, image_url, seo_description, "
+        f"english_ingredients, local_substitutes, instructions, nutrition_info "
+        f"FROM recipes WHERE korean_name IN ({placeholders})",
+        tuple(ko_names)
+    )
+    return {r["korean_name"]: r for r in rows}
+
+
 async def render_index(url, env):
     query = parse_qs(url.query)
     date = query.get("date", [None])[0] or get_korean_today()
@@ -99,10 +121,15 @@ async def render_index(url, env):
         allergies = {}
 
     dishes_raw = _build_dishes(meal, allergies)
+
+    # 개별 쿼리 대신 한 번에 일괄 조회 (D1 reads 절약)
+    ko_names = [d["korean_name"] for d in dishes_raw if d["korean_name"]]
+    recipe_map = await _fetch_recipes_batch(ko_names, db)
+
     translated_dishes = []
     for dish in dishes_raw:
         ko = dish["korean_name"]
-        recipe = await translate_and_localize_recipe(ko, db, env=env) if ko else None
+        recipe = recipe_map.get(ko)
         translated_dishes.append({
             **dish,
             "english_name": recipe.get("english_name") if recipe else ko,
@@ -139,7 +166,10 @@ async def render_index(url, env):
         dishes=translated_dishes, tray_affiliate_url=tray_affiliate_url,
         prev_date=prev_date, next_date=next_date
     )
-    return Response(html, headers={"Content-Type": "text/html; charset=utf-8"})
+    return Response(html, headers={
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "public, max-age=1800, s-maxage=3600",  # 브라우저 30분, CF 엣지 1시간
+    })
 
 
 async def render_week(url, env):
@@ -167,10 +197,12 @@ async def render_week(url, env):
             allergies = {}
 
         dishes_raw = _build_dishes(meal, allergies)
+        ko_names = [d["korean_name"] for d in dishes_raw if d["korean_name"]]
+        recipe_map = await _fetch_recipes_batch(ko_names, db)
         dishes = []
         for dish in dishes_raw:
             ko = dish["korean_name"]
-            recipe = await translate_and_localize_recipe(ko, db, env=env) if ko else None
+            recipe = recipe_map.get(ko)
             dishes.append({
                 **dish,
                 "english_name": recipe.get("english_name") if recipe else ko,
@@ -199,7 +231,10 @@ async def render_week(url, env):
         tray_affiliate_url=tray_affiliate_url,
         week_label=datetime.strptime(dates[0], "%Y%m%d").strftime("Week of %B %d, %Y")
     )
-    return Response(html, headers={"Content-Type": "text/html; charset=utf-8"})
+    return Response(html, headers={
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "public, max-age=1800, s-maxage=3600",
+    })
 
 
 async def render_search(url, env):
@@ -303,6 +338,71 @@ async def render_recipe(recipe_id, env):
         nutrition=nutrition, tray_affiliate_url=tray_affiliate_url,
         ld_json=json.dumps(ld_json)
     )
+    return Response(html, headers={
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "public, max-age=3600, s-maxage=86400",  # 브라우저 1시간, CF 엣지 1일
+    })
+
+
+async def render_recipes(url, env):
+    """레시피 탐색 페이지 — category/tag 필터 + 페이지네이션"""
+    query = parse_qs(url.query)
+    category = (query.get("category", [None])[0] or "").strip()
+    tag      = (query.get("tag", [None])[0] or "").strip()
+    page     = max(1, int((query.get("page", [1])[0] or 1)))
+    per_page = 24
+
+    db = get_db_adapter(env)
+
+    # 필터 SQL 조건
+    conditions, params = [], []
+    if category:
+        conditions.append("category = ?")
+        params.append(category)
+    if tag:
+        conditions.append("tags LIKE ?")
+        params.append(f'%"{tag}"%')
+    # 영어명이 있는 레시피만
+    conditions.append("(english_name IS NOT NULL AND english_name != '')")
+    where = "WHERE " + " AND ".join(conditions)
+
+    offset = (page - 1) * per_page
+    params_page = params + [per_page, offset]
+
+    recipes = await db.fetch_all(
+        f"SELECT id, korean_name, english_name, image_url, category, tags, seo_description "
+        f"FROM recipes {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+        tuple(params_page)
+    )
+    # 총 건수 (페이지네이션용)
+    count_row = await db.fetch_one(
+        f"SELECT COUNT(*) as cnt FROM recipes {where}", tuple(params)
+    )
+    total = count_row["cnt"] if count_row else 0
+    total_pages = max(1, (total + per_page - 1) // per_page)
+
+    # 카테고리 집계
+    cats = await db.fetch_all(
+        "SELECT category, COUNT(*) as cnt FROM recipes "
+        "WHERE category IS NOT NULL AND category != '' AND english_name != '' "
+        "GROUP BY category ORDER BY cnt DESC"
+    )
+
+    # tags JSON 파싱
+    parsed_recipes = []
+    for r in recipes:
+        try:
+            tags_list = json.loads(r.get("tags") or "[]")
+        except Exception:
+            tags_list = []
+        parsed_recipes.append({**r, "tags_list": tags_list})
+
+    template = jinja_env.get_template("recipes.html")
+    html = template.render(
+        recipes=parsed_recipes, category=category, tag=tag,
+        page=page, total_pages=total_pages, total=total,
+        categories=cats,
+    )
     return Response(html, headers={"Content-Type": "text/html; charset=utf-8"})
 
 
@@ -314,6 +414,7 @@ async def render_sitemap(host, env):
     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     xml += f'  <url><loc>{host}/</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>\n'
     xml += f'  <url><loc>{host}/week</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>\n'
+    xml += f'  <url><loc>{host}/recipes</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>\n'
     xml += f'  <url><loc>{host}/about</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>\n'
     xml += f'  <url><loc>{host}/privacy</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>\n'
     xml += f'  <url><loc>{host}/terms</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>\n'
@@ -407,6 +508,8 @@ class Default(WorkerEntrypoint):
             return await render_index(url, env)
         elif path == "/week":
             return await render_week(url, env)
+        elif path == "/recipes":
+            return await render_recipes(url, env)
         elif path == "/search":
             return await render_search(url, env)
         elif path.startswith("/recipe/"):

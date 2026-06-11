@@ -8,6 +8,8 @@ on:
 jobs:
   precompute:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -37,3 +39,25 @@ jobs:
           CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+
+      # 3단계: Claude Haiku Batch API로 레시피 자동 태깅 (category + tags)
+      # --mode both: 전날 결과 수거 → 오늘 미태깅 레시피 제출
+      - name: Auto-tag recipes with Claude Haiku Batch API
+        run: python scripts/batch_tag_recipes.py --mode both
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+
+      # pending_tag_batches.json 변경 시 커밋 (batch_id 추적용)
+      - name: Commit pending batch tracking file
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add kschoolfood/scripts/pending_tag_batches.json
+          git diff --staged --quiet || git commit -m "chore: update pending_tag_batches.json [skip ci]"
+          git pull --rebase origin main
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
