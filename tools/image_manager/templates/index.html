@@ -166,9 +166,21 @@
         </button>
 
         <!-- 업로드 결과 -->
-        <div id="upload-result" class="hidden bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
-          <p class="font-semibold text-green-800 mb-1">✅ 업로드 완료!</p>
+        <div id="upload-result" class="hidden bg-green-50 border border-green-200 rounded-lg p-3 text-sm space-y-2">
+          <p class="font-semibold text-green-800">✅ 업로드 완료!</p>
           <p class="text-gray-600">용량: <span id="result-size" class="font-semibold"></span></p>
+          <div>
+            <p class="text-xs text-gray-500 mb-1">이미지 주소 (시트 수동 입력용)</p>
+            <div class="flex items-center gap-2">
+              <input id="result-url-input" type="text" readonly
+                class="flex-1 text-xs bg-white border border-green-300 rounded px-2 py-1.5 text-gray-700 select-all cursor-text"
+                value="">
+              <button onclick="copyResultUrl()"
+                class="shrink-0 text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1.5 rounded font-medium transition-colors">
+                복사
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -488,6 +500,7 @@ async function uploadImage() {
     document.getElementById('img-url-text').textContent = data.url;
     document.getElementById('result-size').textContent =
       `${data.original_kb}KB → ${data.webp_kb}KB (WebP)`;
+    document.getElementById('result-url-input').value = data.url;
     document.getElementById('upload-result').classList.remove('hidden');
 
     // 캐시 업데이트
@@ -502,6 +515,18 @@ async function uploadImage() {
     btn.disabled = false;
     btn.innerHTML = '<span>⬆️</span><span>R2에 업로드</span>';
   }
+}
+
+function copyResultUrl() {
+  const input = document.getElementById('result-url-input');
+  input.select();
+  navigator.clipboard.writeText(input.value).then(() => {
+    const btn = event.target;
+    btn.textContent = '✅';
+    setTimeout(() => { btn.textContent = '복사'; }, 1500);
+  }).catch(() => {
+    document.execCommand('copy');
+  });
 }
 
 // ── 레시피 저장 ──────────────────────────────────────────────────────────
