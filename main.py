@@ -141,11 +141,12 @@ async def render_index(url, env):
     ko_names = [d["korean_name"] for d in dishes_raw if d["korean_name"]]
     recipe_map = await _fetch_recipes_batch(ko_names, db)
 
-    translated_dishes = []
+    # 각 dish를 번역하고 is_sub끼리 부모 dish의 subs 리스트에 합침
+    flat = []
     for dish in dishes_raw:
         ko = dish["korean_name"]
         recipe = recipe_map.get(ko)
-        translated_dishes.append({
+        flat.append({
             **dish,
             "english_name": recipe.get("english_name") if recipe else ko,
             "recipe_id": recipe.get("id") if recipe else None,
@@ -153,9 +154,17 @@ async def render_index(url, env):
             "image_url": (recipe.get("image_url") or "") if recipe else "",
         })
 
-    # 빠진 칸 채우기 (5칸 유지) — is_sub=True 항목은 별도 칸 차지 안 함
+    # is_sub 항목을 부모 항목의 subs 리스트로 합침
+    translated_dishes = []
+    for d in flat:
+        if d.get("is_sub") and translated_dishes and translated_dishes[-1]["key"] == d["key"]:
+            translated_dishes[-1].setdefault("subs", []).append(d)
+        else:
+            translated_dishes.append({**d, "subs": []})
+
+    # 빠진 칸 채우기 (5칸 유지)
     all_keys = ["rice","soup","side1","side2","side3"]
-    present = {d["key"] for d in translated_dishes if not d.get("is_sub")}
+    present = {d["key"] for d in translated_dishes}
     for role, key in [("Main Rice","rice"),("Soup/Stew","soup"),
                       ("Banchan (Side 1)","side1"),("Banchan (Side 2)","side2"),
                       ("Banchan (Side 3)","side3")]:
@@ -163,7 +172,7 @@ async def render_index(url, env):
             translated_dishes.insert(all_keys.index(key), {
                 "role": role, "key": key, "korean_name": meal.get(key,""),
                 "allergies": [], "english_name": meal.get(key,""),
-                "recipe_id": None, "has_recipe": False, "is_sub": False,
+                "recipe_id": None, "has_recipe": False, "is_sub": False, "subs": [],
             })
 
     tray_affiliate_url = await get_tray_affiliate_link(db)
