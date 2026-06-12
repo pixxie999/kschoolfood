@@ -71,15 +71,23 @@ def _build_dishes(meal: dict, allergies: dict) -> list:
         ("Banchan (Side 2)","side2"),
         ("Banchan (Side 3)","side3"),
     ]
-    return [
-        {
-            "role": role, "key": key,
-            "korean_name": meal.get(key, ""),
-            "allergies": allergies.get(key, []),
-        }
-        for role, key in roles
-        if meal.get(key, "") not in SKIP
-    ]
+    result = []
+    for role, key in roles:
+        val = meal.get(key, "")
+        if val in SKIP:
+            continue
+        # "|" 구분자로 여러 메뉴가 합쳐진 경우 개별 항목으로 분리
+        # 첫 번째 항목은 원래 key 사용, 추가 항목은 sub_N으로 표기
+        names = [n.strip() for n in val.split("|") if n.strip()]
+        for i, name in enumerate(names):
+            result.append({
+                "role": role,
+                "key": key,
+                "korean_name": name,
+                "allergies": allergies.get(key, []) if i == 0 else [],
+                "is_sub": i > 0,  # 같은 칸의 추가 메뉴 여부
+            })
+    return result
 
 async def _fetch_recipes_batch(ko_names: list, db) -> dict:
     """여러 메뉴명을 한 번의 IN 쿼리로 조회 — D1 reads 대폭 절약"""
@@ -145,9 +153,9 @@ async def render_index(url, env):
             "image_url": (recipe.get("image_url") or "") if recipe else "",
         })
 
-    # 빠진 칸 채우기 (5칸 유지)
+    # 빠진 칸 채우기 (5칸 유지) — is_sub=True 항목은 별도 칸 차지 안 함
     all_keys = ["rice","soup","side1","side2","side3"]
-    present = {d["key"] for d in translated_dishes}
+    present = {d["key"] for d in translated_dishes if not d.get("is_sub")}
     for role, key in [("Main Rice","rice"),("Soup/Stew","soup"),
                       ("Banchan (Side 1)","side1"),("Banchan (Side 2)","side2"),
                       ("Banchan (Side 3)","side3")]:
@@ -155,7 +163,7 @@ async def render_index(url, env):
             translated_dishes.insert(all_keys.index(key), {
                 "role": role, "key": key, "korean_name": meal.get(key,""),
                 "allergies": [], "english_name": meal.get(key,""),
-                "recipe_id": None, "has_recipe": False
+                "recipe_id": None, "has_recipe": False, "is_sub": False,
             })
 
     tray_affiliate_url = await get_tray_affiliate_link(db)

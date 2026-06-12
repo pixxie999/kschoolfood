@@ -32,6 +32,7 @@
         <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
             <!-- 3 Side Dishes on the TOP -->
             {% for dish in dishes[2:] %}
+            {% if not dish.is_sub %}
             <div class="md:col-span-2">
                 {% if dish.has_recipe %}
                 <a href="/recipe/{{ dish.recipe_id }}"
@@ -61,7 +62,7 @@
                             {% endif %}
                         </div>
                         <div>
-                            <h3 class="font-outfit font-bold text-base line-clamp-2
+                            <h3 class="font-outfit font-bold text-base line-clamp-1
                                 {% if dish.image_url %}text-white drop-shadow{% else %}text-slate-900{% endif %}">
                                 {{ dish.english_name }}
                             </h3>
@@ -69,6 +70,25 @@
                                 {% if dish.image_url %}text-white/70{% else %}text-gray-500{% endif %}">
                                 {{ dish.korean_name }}
                             </p>
+                            {# 같은 칸의 추가 메뉴(is_sub) 표시 #}
+                            {% set ns = namespace(idx=loop.index0 + 2) %}
+                            {% for sub in dishes[ns.idx + 1:] %}
+                              {% if sub.is_sub and sub.key == dish.key %}
+                              <div class="mt-1 border-t border-white/20 pt-1">
+                                {% if sub.has_recipe %}
+                                <a href="/recipe/{{ sub.recipe_id }}" class="text-[10px] font-semibold
+                                    {% if dish.image_url %}text-orange-300{% else %}text-orange-600{% endif %}
+                                    hover:underline" onclick="event.stopPropagation()">
+                                  + {{ sub.english_name }} &rarr;
+                                </a>
+                                {% else %}
+                                <span class="text-[10px] {% if dish.image_url %}text-white/60{% else %}text-slate-400{% endif %}">
+                                  + {{ sub.korean_name }}
+                                </span>
+                                {% endif %}
+                              </div>
+                              {% endif %}
+                            {% endfor %}
                             <span class="text-[10px] font-bold mt-1 inline-block
                                 {% if dish.image_url %}text-orange-300{% else %}bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full{% endif %}">
                                 View Recipe &rarr;
@@ -91,7 +111,7 @@
                             {{ dish.role }}
                         </span>
                         <div>
-                            <h3 class="font-outfit font-semibold text-base line-clamp-2
+                            <h3 class="font-outfit font-semibold text-base line-clamp-1
                                 {% if dish.image_url %}text-white drop-shadow{% else %}text-slate-600{% endif %}">
                                 {{ dish.english_name }}
                             </h3>
@@ -99,6 +119,23 @@
                                 {% if dish.image_url %}text-white/60{% else %}text-slate-400{% endif %}">
                                 {{ dish.korean_name }}
                             </p>
+                            {# 추가 메뉴(is_sub) 표시 #}
+                            {% set ns = namespace(idx=loop.index0 + 2) %}
+                            {% for sub in dishes[ns.idx + 1:] %}
+                              {% if sub.is_sub and sub.key == dish.key %}
+                              <div class="mt-0.5">
+                                {% if sub.has_recipe %}
+                                <a href="/recipe/{{ sub.recipe_id }}" class="text-[10px] font-semibold text-orange-500 hover:underline">
+                                  + {{ sub.english_name }} &rarr;
+                                </a>
+                                {% else %}
+                                <span class="text-[10px] {% if dish.image_url %}text-white/50{% else %}text-slate-400{% endif %}">
+                                  + {{ sub.korean_name }}
+                                </span>
+                                {% endif %}
+                              </div>
+                              {% endif %}
+                            {% endfor %}
                             <span class="text-[9px] font-medium mt-1 inline-block
                                 {% if dish.image_url %}text-white/50{% else %}bg-slate-200 text-slate-500 px-2 py-0.5 rounded-full{% endif %}">
                                 No Recipe
@@ -108,6 +145,7 @@
                 </div>
                 {% endif %}
             </div>
+            {% endif %}
             {% endfor %}
 
             <!-- Main Rice Compartment -->
