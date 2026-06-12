@@ -72,11 +72,11 @@
                             {% for sub in dish.subs %}
                             <div class="mt-1 pt-1 border-t {% if dish.image_url %}border-white/20{% else %}border-slate-200{% endif %}">
                                 {% if sub.has_recipe %}
-                                <a href="/recipe/{{ sub.recipe_id }}"
-                                   class="text-[10px] font-semibold hover:underline {% if dish.image_url %}text-orange-300{% else %}text-orange-600{% endif %}"
-                                   onclick="event.stopPropagation()">
+                                <span role="link" tabindex="0"
+                                   class="text-[10px] font-semibold hover:underline cursor-pointer {% if dish.image_url %}text-orange-300{% else %}text-orange-600{% endif %}"
+                                   onclick="event.stopPropagation(); window.location='/recipe/{{ sub.recipe_id }}'">
                                     + {{ sub.english_name }} &rarr;
-                                </a>
+                                </span>
                                 {% else %}
                                 <span class="text-[10px] {% if dish.image_url %}text-white/60{% else %}text-slate-400{% endif %}">
                                     + {{ sub.korean_name }}
