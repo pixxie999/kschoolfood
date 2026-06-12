@@ -85,7 +85,8 @@ async def fetch_meal_from_neis(date_str: str, env=None) -> Optional[Dict[str, An
         soup  = cleaned[1] if len(cleaned) > 1 else "Soup"
         side1 = cleaned[2] if len(cleaned) > 2 else "Side 1"
         side2 = cleaned[3] if len(cleaned) > 3 else "Side 2"
-        side3 = ", ".join(cleaned[4:]) if len(cleaned) > 4 else "Side 3"
+        # 5번째 dish만 사용 (6번째 이후는 무시) — 합쳐진 문자열로 저장하면 레시피 매칭 불가
+        side3 = cleaned[4] if len(cleaned) > 4 else "Side 3"
 
         return {
             "date": date_str, "rice": rice, "soup": soup,
