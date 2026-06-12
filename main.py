@@ -121,6 +121,10 @@ async def render_index(url, env):
     except ValueError:
         is_weekend = False
 
+    # ?refresh=1 → D1 캐시 삭제 후 NEIS 재수집 (side3 형식 오류 수동 수정용)
+    if query.get("refresh", [None])[0] and not is_weekend:
+        await db.execute("DELETE FROM meal_trays WHERE date = ?", (date,))
+
     meal = None if is_weekend else await _get_meal(date, db, env)
 
     if not meal:
@@ -192,7 +196,7 @@ async def render_index(url, env):
     )
     return Response(html, headers={
         "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "public, max-age=1800, s-maxage=3600",  # 브라우저 30분, CF 엣지 1시간
+        "Cache-Control": "public, max-age=300, s-maxage=300",  # 브라우저/CF 엣지 5분
     })
 
 
