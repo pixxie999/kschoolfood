@@ -404,10 +404,10 @@ def api_upload():
         original = file.read()
         webp     = convert_to_webp(original)
 
-        # 한글 파일명 URL 인코딩 문제 방지 — 메뉴명 MD5 해시 사용
-        # 같은 메뉴는 항상 같은 파일명 → 중복 업로드 방지
-        name_hash = hashlib.md5(korean_name.encode()).hexdigest()[:16]
-        filename  = f"recipes/{name_hash}.webp"
+        # 파일명: 메뉴명 해시 + 타임스탬프 → 재업로드 시 새 URL 생성 (캐시 문제 방지)
+        name_hash = hashlib.md5(korean_name.encode()).hexdigest()[:12]
+        timestamp = int(time.time())
+        filename  = f"recipes/{name_hash}_{timestamp}.webp"
         public_url = upload_to_r2(webp, filename)
 
         update_sheet_row(row, {"image_url": public_url})
