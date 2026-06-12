@@ -106,7 +106,14 @@ async def render_index(url, env):
         formatted_date = date
 
     db = get_db_adapter(env)
-    meal = await _get_meal(date, db, env)
+
+    # 주말(토=5, 일=6)은 D1 조회 없이 바로 빈 식단 처리
+    try:
+        is_weekend = datetime.strptime(date, "%Y%m%d").weekday() >= 5
+    except ValueError:
+        is_weekend = False
+
+    meal = None if is_weekend else await _get_meal(date, db, env)
 
     if not meal:
         meal = {
