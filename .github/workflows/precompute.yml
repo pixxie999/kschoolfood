@@ -50,6 +50,16 @@ jobs:
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
 
+      # 4단계: D1에만 있고 시트에 없는 레시피 → 시트에 추가
+      - name: Sync D1 → Google Sheet (missing recipes)
+        run: python scripts/sync_d1_to_sheet.py
+        env:
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+
       # pending_tag_batches.json 변경 시 커밋 (batch_id 추적용)
       - name: Commit pending batch tracking file
         run: |
