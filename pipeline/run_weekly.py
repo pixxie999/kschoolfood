@@ -11,10 +11,16 @@ import sys
 import json
 import logging
 
+import markdown as md
+
 from pipeline.aggregate import build_snapshot
 from pipeline.generate import generate_post
 from pipeline.validate import validate_post
 from pipeline.write_d1 import select_topic, already_published_this_week, write_post
+
+
+def _md_to_html(text: str) -> str:
+    return md.markdown(text or "", extensions=["tables", "fenced_code"])
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -41,6 +47,9 @@ def main() -> int:
         return 1
 
     ok, reasons = validate_post(generated, snapshot)
+    # 검증은 markdown 원문 기준. 저장 직전에 HTML로 변환해 D1에 박는다 (Worker는 의존성 없이 렌더).
+    generated["body_en"] = _md_to_html(generated["body_en"])
+    generated["body_ko"] = _md_to_html(generated["body_ko"])
     if not ok:
         logger.warning(f"검증 실패 — {reasons}")
     else:

@@ -17,7 +17,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install requests anthropic
+        run: pip install requests anthropic markdown
 
       - name: Run weekly blog pipeline
         run: python -m pipeline.run_weekly

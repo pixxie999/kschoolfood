@@ -32,15 +32,6 @@ def _from_json(value):
 
 jinja_env.filters["from_json"] = _from_json
 
-def _md_to_html(text):
-    try:
-        import markdown
-        return markdown.markdown(text or "", extensions=["tables", "fenced_code"])
-    except Exception:
-        return text or ""
-
-jinja_env.filters["markdown"] = _md_to_html
-
 
 def _env_get(env, key: str, default: str = "") -> str:
     """Workers env 또는 os.environ에서 안전하게 읽기."""
