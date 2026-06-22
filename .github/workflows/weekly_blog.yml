@@ -1,0 +1,31 @@
+name: Weekly Blog Post
+
+on:
+  schedule:
+    # 매주 화요일 07:00 KST (UTC 화 22:00)
+    - cron: '0 22 * * 1'
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests anthropic
+
+      - name: Run weekly blog pipeline
+        run: python -m pipeline.run_weekly
+        env:
+          NEIS_API_KEY: ${{ secrets.NEIS_API_KEY }}
+          OFFICE_CODE: K10
+          SCHOOL_CODE: '7801106'
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}

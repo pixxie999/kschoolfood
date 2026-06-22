@@ -9,10 +9,12 @@ database_name = "kschoolfood-db"
 database_id = "0902c504-c3be-4596-9991-10940be73c05"
 
 [vars]
+SITE_DOMAIN = "https://kschoolfood.com"
 OFFICE_CODE = "K10"
 SCHOOL_CODE = "7801106"
 ACTIVE_LLM_PROVIDER = "claude"
 AMAZON_TAG = "your_amazon_tag_here"
 IHERB_CODE = "your_iherb_code_here"
+# ADSENSE_PUBLISHER_ID는 'ca-pub-XXXXXXXX' 형식. 'wrangler secret put ADSENSE_PUBLISHER_ID'로 주입.
 # API KEY 같은 민감한 비밀 정보는 배포 시에는 'wrangler secret put'으로, 
 # 로컬 개발 시에는 '.dev.vars' 파일을 통해 관리합니다.

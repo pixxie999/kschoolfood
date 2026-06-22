@@ -98,3 +98,43 @@ async def fetch_meal_from_neis(date_str: str, env=None) -> Optional[Dict[str, An
     except Exception as e:
         logger.error(f"NEIS API 오류: {e}")
         return None
+
+
+async def fetch_meal_detail(date_str: str, env=None, keep_allergy: bool = True) -> Optional[Dict[str, Any]]:
+    """블로그 집계용 — 모든 dish + 알레르기 코드 보존.
+
+    Returns: {"date":..., "calories":..., "dishes":[{"name":..., "allergies":[...]}]}
+    """
+    neis_key = _get_setting("NEIS_API_KEY", env) or settings.NEIS_API_KEY
+    office_code = _get_setting("OFFICE_CODE", env) or settings.OFFICE_CODE
+    school_code = _get_setting("SCHOOL_CODE", env) or settings.SCHOOL_CODE
+    if not neis_key:
+        return None
+
+    url = "https://open.neis.go.kr/hub/mealServiceDietInfo"
+    params = {
+        "KEY": neis_key, "Type": "json", "pIndex": 1, "pSize": 100,
+        "ATPT_OFCDC_SC_CODE": office_code, "SD_SCHUL_CODE": school_code,
+        "MLSV_YMD": date_str,
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=15.0)
+            response.raise_for_status()
+            data = response.json()
+        if "mealServiceDietInfo" not in data:
+            return None
+        row = data["mealServiceDietInfo"][1]["row"][0]
+        raw_ddish = row.get("DDISH_NM", "")
+        calories = row.get("CAL_INFO", "0 Kcal")
+        raw_dishes = [d.strip() for d in re.split(r'<br\s*/?>|\n', raw_ddish) if d.strip()]
+        dishes = []
+        for raw in raw_dishes:
+            item = {"name": clean_dish_name(raw)}
+            if keep_allergy:
+                item["allergies"] = parse_allergies(raw)
+            dishes.append(item)
+        return {"date": date_str, "calories": calories, "dishes": dishes}
+    except Exception as e:
+        logger.error(f"NEIS detail API 오류 ({date_str}): {e}")
+        return None

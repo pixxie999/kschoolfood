@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Blog — Stories from Korean School Lunches | K-School Food{% endblock %}
+{% block meta_desc %}Data-driven and cultural blog posts about Korean school lunches — menu rankings, nutrition, allergies, and recipes.{% endblock %}
+{% block og_title %}K-School Food Blog — Stories from Korean School Lunches{% endblock %}
+{% block og_desc %}Data-driven and cultural blog posts about Korean school lunches.{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8 space-y-8">
+    <header class="space-y-2">
+        <span class="text-xs font-bold text-orange-500 uppercase tracking-widest">Blog</span>
+        <h1 class="text-3xl font-outfit font-extrabold text-gray-900">Stories from Korean School Lunches</h1>
+        <p class="text-sm text-gray-600">Data-driven and cultural notes about K-school food.</p>
+    </header>
+
+    {% if not posts %}
+    <div class="bg-white border border-gray-100 rounded-2xl p-10 text-center text-gray-500">
+        No posts yet.
+    </div>
+    {% else %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {% for p in posts %}
+        <a href="/blog/{{ p.slug }}" class="block bg-white border border-gray-100 rounded-2xl overflow-hidden hover:shadow-lg transition-shadow">
+            {% if p.hero_image %}
+            <img src="{{ p.hero_image }}" alt="{{ p.title_en }}" class="w-full h-40 object-cover">
+            {% endif %}
+            <div class="p-5 space-y-2">
+                <h2 class="font-outfit font-bold text-lg text-gray-900 line-clamp-2">{{ p.title_en }}</h2>
+                {% if p.meta_en %}
+                <p class="text-sm text-gray-600 line-clamp-3">{{ p.meta_en }}</p>
+                {% endif %}
+                {% if p.published_at %}
+                <p class="text-xs text-gray-400">{{ p.published_at[:10] }}</p>
+                {% endif %}
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

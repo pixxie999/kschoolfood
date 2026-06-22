@@ -18,18 +18,27 @@
       gtag('config', 'G-CRZF966L52');
     </script>
 
+    {% set _site = site_domain or 'https://kschoolfood.com' %}
+    {% set _path = page_path or '/' %}
+    {% set _canonical = canonical_url or (_site ~ _path) %}
+    {% set _og_image = og_image or (_site ~ '/static/og-default.jpg') %}
+
     <!-- Google AdSense -->
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
+    {% if adsense_publisher_id %}
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ adsense_publisher_id }}" crossorigin="anonymous"></script>
+    {% endif %}
 
-    <!-- Canonical & Sitemap -->
-    <link rel="canonical" href="{% block canonical %}https://kschoolfood.com/{% endblock %}">
+    <!-- Canonical -->
+    <link rel="canonical" href="{{ _canonical }}">
 
-    <!-- OpenGraph Tags for Social Networks (Pinterest/Instagram) -->
+    <!-- OpenGraph Tags -->
     <meta property="og:title" content="{% block og_title %}K-School Food - Healthy School Lunch Recipes{% endblock %}">
     <meta property="og:description" content="{% block og_desc %}Explore daily Korean school lunch menu translated with local substitutes and shopping links.{% endblock %}">
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="{% block og_url %}https://kschoolfood.com/{% endblock %}">
-    <meta property="og:image" content="https://images.unsplash.com/photo-1541832676-9b763b0239ab?q=80&w=600">
+    <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+    <meta property="og:url" content="{{ _canonical }}">
+    <meta property="og:image" content="{{ _og_image }}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="{{ _og_image }}">
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -96,6 +105,7 @@
                 <a href="/" class="text-sm font-semibold text-gray-600 hover:text-orange-500 transition-colors">Today</a>
                 <a href="/week" class="text-sm font-semibold text-gray-600 hover:text-orange-500 transition-colors">Week</a>
                 <a href="/recipes" class="text-sm font-semibold text-gray-600 hover:text-orange-500 transition-colors">Recipes</a>
+                <a href="/blog" class="text-sm font-semibold text-gray-600 hover:text-orange-500 transition-colors">Blog</a>
             </nav>
         </div>
     </header>

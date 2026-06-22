@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}{{ post.title_en }} — K-School Food Blog{% endblock %}
+{% block meta_desc %}{{ post.meta_en or post.title_en }}{% endblock %}
+{% block og_title %}{{ post.title_en }}{% endblock %}
+{% block og_desc %}{{ post.meta_en or post.title_en }}{% endblock %}
+{% block og_type %}article{% endblock %}
+
+{% block head_extra %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": {{ post.title_en | tojson }},
+  "description": {{ (post.meta_en or '') | tojson }},
+  {% if post.hero_image %}"image": {{ post.hero_image | tojson }},{% endif %}
+  "datePublished": "{{ (post.published_at or '')[:10] }}",
+  "author": { "@type": "Organization", "name": "K-School Food" },
+  "publisher": { "@type": "Organization", "name": "K-School Food" }
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<article class="max-w-3xl mx-auto px-4 py-8 space-y-6">
+    <header class="space-y-3">
+        <a href="/blog" class="text-xs font-semibold text-orange-500 uppercase tracking-widest">&larr; Blog</a>
+        <h1 class="text-3xl md:text-4xl font-outfit font-extrabold text-gray-900">{{ post.title_en }}</h1>
+        {% if post.published_at %}
+        <p class="text-xs text-gray-400">{{ post.published_at[:10] }}</p>
+        {% endif %}
+    </header>
+
+    {% if post.hero_image %}
+    <img src="{{ post.hero_image }}" alt="{{ post.title_en }}" class="w-full rounded-2xl">
+    {% endif %}
+
+    <div class="prose prose-lg max-w-none prose-headings:font-outfit prose-headings:text-gray-900 prose-a:text-orange-600">
+        {{ post.body_en | markdown | safe }}
+    </div>
+
+    <footer class="mt-12 pt-6 border-t border-gray-100 text-xs text-gray-500">
+        For reference only — please confirm details with your school or healthcare provider.
+    </footer>
+</article>
+{% endblock %}

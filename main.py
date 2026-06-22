@@ -32,6 +32,40 @@ def _from_json(value):
 
 jinja_env.filters["from_json"] = _from_json
 
+def _md_to_html(text):
+    try:
+        import markdown
+        return markdown.markdown(text or "", extensions=["tables", "fenced_code"])
+    except Exception:
+        return text or ""
+
+jinja_env.filters["markdown"] = _md_to_html
+
+
+def _env_get(env, key: str, default: str = "") -> str:
+    """Workers env 또는 os.environ에서 안전하게 읽기."""
+    if env is not None:
+        try:
+            v = getattr(env, key, None)
+            if v:
+                return str(v)
+        except Exception:
+            pass
+    return os.environ.get(key, default)
+
+
+def _seo_ctx(env, path: str, og_image: str = "") -> dict:
+    """모든 페이지 렌더에 주입할 공통 SEO 컨텍스트."""
+    site = _env_get(env, "SITE_DOMAIN", "https://kschoolfood.com").rstrip("/")
+    pub_id = _env_get(env, "ADSENSE_PUBLISHER_ID", "")
+    return {
+        "site_domain": site,
+        "page_path": path,
+        "canonical_url": f"{site}{path}",
+        "og_image": og_image or f"{site}/static/og-default.jpg",
+        "adsense_publisher_id": pub_id if pub_id.startswith("ca-pub-") else "",
+    }
+
 def get_korean_today() -> str:
     kst = timezone(timedelta(hours=9))
     return datetime.now(kst).strftime("%Y%m%d")
@@ -192,7 +226,8 @@ async def render_index(url, env):
     html = template.render(
         date=date, formatted_date=formatted_date, meal=meal,
         dishes=translated_dishes, tray_affiliate_url=tray_affiliate_url,
-        prev_date=prev_date, next_date=next_date
+        prev_date=prev_date, next_date=next_date,
+        **_seo_ctx(env, "/"),
     )
     return Response(html, headers={
         "Content-Type": "text/html; charset=utf-8",
@@ -257,7 +292,8 @@ async def render_week(url, env):
         week_data=week_data, anchor=anchor,
         prev_week=prev_week, next_week=next_week,
         tray_affiliate_url=tray_affiliate_url,
-        week_label=datetime.strptime(dates[0], "%Y%m%d").strftime("Week of %B %d, %Y")
+        week_label=datetime.strptime(dates[0], "%Y%m%d").strftime("Week of %B %d, %Y"),
+        **_seo_ctx(env, "/week"),
     )
     return Response(html, headers={
         "Content-Type": "text/html; charset=utf-8",
@@ -282,7 +318,7 @@ async def render_search(url, env):
         )
 
     template = jinja_env.get_template("search.html")
-    html = template.render(q=q, results=results)
+    html = template.render(q=q, results=results, **_seo_ctx(env, "/search"))
     return Response(html, headers={"Content-Type": "text/html; charset=utf-8"})
 
 
@@ -300,7 +336,8 @@ async def render_recipe(recipe_id, env):
     matched_ingredients = await match_affiliate_links(ingredients, db)
     tray_affiliate_url = await get_tray_affiliate_link(db)
 
-    image = recipe_row.get("image_url") or "https://images.unsplash.com/photo-1541832676-9b763b0239ab?q=80&w=600"
+    site = _env_get(env, "SITE_DOMAIN", "https://kschoolfood.com").rstrip("/")
+    image = recipe_row.get("image_url") or f"{site}/static/og-default.jpg"
 
     # recipeInstructions — name+url 필드 포함 (Search Console 필수)
     recipe_instructions = []
@@ -309,7 +346,7 @@ async def render_recipe(recipe_id, env):
             "@type": "HowToStep",
             "name": f"Step {idx}",
             "text": step,
-            "url": f"https://kschoolfood.com/recipe/{recipe_id}#step{idx}",
+            "url": f"{site}/recipe/{recipe_id}#step{idx}",
         })
 
     # 리뷰/평점 데이터 (D1에서 집계)
@@ -346,7 +383,7 @@ async def render_recipe(recipe_id, env):
                 "@type": "HowToStep",
                 "name": "Prepare",
                 "text": f"Prepare and cook {recipe_row['english_name']} following traditional Korean method.",
-                "url": f"https://kschoolfood.com/recipe/{recipe_id}#step1",
+                "url": f"{site}/recipe/{recipe_id}#step1",
             }
         ],
         "nutrition": {
@@ -364,7 +401,8 @@ async def render_recipe(recipe_id, env):
         recipe=recipe_row, ingredients=matched_ingredients,
         substitutes=substitutes, instructions=instructions,
         nutrition=nutrition, tray_affiliate_url=tray_affiliate_url,
-        ld_json=json.dumps(ld_json)
+        ld_json=json.dumps(ld_json),
+        **_seo_ctx(env, f"/recipe/{recipe_id}", og_image=image),
     )
     return Response(html, headers={
         "Content-Type": "text/html; charset=utf-8",
@@ -430,24 +468,85 @@ async def render_recipes(url, env):
         recipes=parsed_recipes, category=category, tag=tag,
         page=page, total_pages=total_pages, total=total,
         categories=cats,
+        **_seo_ctx(env, "/recipes"),
     )
     return Response(html, headers={"Content-Type": "text/html; charset=utf-8"})
 
 
+async def render_blog_list(url, env):
+    """블로그 목록 — status=published 영어 필드만 노출."""
+    db = get_db_adapter(env)
+    posts = await db.fetch_all(
+        "SELECT slug, title_en, meta_en, hero_image, published_at "
+        "FROM posts WHERE status = 'published' "
+        "ORDER BY COALESCE(published_at, created_at) DESC LIMIT 100"
+    )
+    template = jinja_env.get_template("blog_list.html")
+    html = template.render(posts=posts, **_seo_ctx(env, "/blog"))
+    return Response(html, headers={
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "public, max-age=600, s-maxage=3600",
+    })
+
+
+async def render_blog_post(slug, env):
+    """블로그 상세 — published만, 영어 필드만."""
+    db = get_db_adapter(env)
+    post = await db.fetch_one(
+        "SELECT slug, title_en, body_en, meta_en, hero_image, published_at "
+        "FROM posts WHERE slug = ? AND status = 'published'",
+        (slug,)
+    )
+    if not post:
+        return Response("Not Found", status=404)
+    template = jinja_env.get_template("blog_post.html")
+    html = template.render(
+        post=post,
+        **_seo_ctx(env, f"/blog/{slug}", og_image=post.get("hero_image") or ""),
+    )
+    return Response(html, headers={
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "public, max-age=3600, s-maxage=86400",
+    })
+
+
+# 정적 페이지의 "실제 변경 날짜" — 콘텐츠 수정 시 이 값을 갱신할 것
+# (배포일 일괄 갱신 금지 — STATIC-SITE-SEO-BUILD-POLICY §5)
+STATIC_PAGE_LASTMOD = "2026-06-22"
+
 async def render_sitemap(host, env):
     db = get_db_adapter(env)
-    recipes = await db.fetch_all("SELECT id FROM recipes")
+    # 레시피·블로그 모두 lastmod의 근거가 될 시간 컬럼을 함께 조회
+    recipes = await db.fetch_all("SELECT id FROM recipes ORDER BY id")
+    posts = await db.fetch_all(
+        "SELECT slug, COALESCE(published_at, created_at) AS lastmod "
+        "FROM posts WHERE status = 'published' "
+        "ORDER BY COALESCE(published_at, created_at) DESC"
+    )
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    static_lm = STATIC_PAGE_LASTMOD
+
+    # 블로그 목록의 lastmod = 가장 최근 발행글 (없으면 정적 페이지 날짜)
+    blog_list_lm = (posts[0]["lastmod"][:10] if posts and posts[0].get("lastmod") else static_lm)
+
     xml  = '<?xml version="1.0" encoding="UTF-8"?>\n'
     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    # 매일 실제로 콘텐츠가 바뀌는 페이지에만 today 사용
     xml += f'  <url><loc>{host}/</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>\n'
     xml += f'  <url><loc>{host}/week</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>\n'
-    xml += f'  <url><loc>{host}/recipes</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>\n'
-    xml += f'  <url><loc>{host}/about</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>\n'
-    xml += f'  <url><loc>{host}/privacy</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>\n'
-    xml += f'  <url><loc>{host}/terms</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>\n'
+    # 레시피 목록은 새 레시피 추가 시에만 변경되므로 가장 최근 레시피 추가 날짜 = 정적 기준
+    xml += f'  <url><loc>{host}/recipes</loc><lastmod>{static_lm}</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>\n'
+    xml += f'  <url><loc>{host}/blog</loc><lastmod>{blog_list_lm}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\n'
+    xml += f'  <url><loc>{host}/about</loc><lastmod>{static_lm}</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>\n'
+    xml += f'  <url><loc>{host}/privacy</loc><lastmod>{static_lm}</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>\n'
+    xml += f'  <url><loc>{host}/terms</loc><lastmod>{static_lm}</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>\n'
+    # 레시피 상세에는 updated_at 컬럼이 없으므로 lastmod 생략 (구글이 다른 신호로 판단)
     for r in recipes:
-        xml += f'  <url><loc>{host}/recipe/{r["id"]}</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\n'
+        xml += f'  <url><loc>{host}/recipe/{r["id"]}</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>\n'
+    # 블로그 글은 published_at 사용 (실제 변경 날짜)
+    for p in posts:
+        lm = (p["lastmod"] or static_lm)[:10]
+        xml += f'  <url><loc>{host}/blog/{p["slug"]}</loc><lastmod>{lm}</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>\n'
     xml += '</urlset>'
     return Response(xml, headers={"Content-Type": "application/xml; charset=utf-8"})
 
@@ -468,8 +567,10 @@ async def render_ads_txt(env):
 
 
 async def render_static_page(template_name, env):
+    # 템플릿명 → URL path 매핑 (privacy.html → /privacy)
+    page_path = "/" + template_name.replace(".html", "")
     tmpl = jinja_env.get_template(template_name)
-    html = tmpl.render()
+    html = tmpl.render(**_seo_ctx(env, page_path))
     return Response(html, headers={"Content-Type": "text/html; charset=utf-8"})
 
 
@@ -538,6 +639,13 @@ class Default(WorkerEntrypoint):
             return await render_week(url, env)
         elif path == "/recipes":
             return await render_recipes(url, env)
+        elif path == "/blog":
+            return await render_blog_list(url, env)
+        elif path.startswith("/blog/"):
+            slug = path[len("/blog/"):].rstrip("/")
+            if not slug:
+                return await render_blog_list(url, env)
+            return await render_blog_post(slug, env)
         elif path == "/search":
             return await render_search(url, env)
         elif path.startswith("/recipe/"):
